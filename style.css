@@ -179,6 +179,8 @@ textarea:focus, input:focus, select:focus { outline: 2px solid rgba(34, 197, 94,
   background: #0f172a;
 }
 .proposal-exercise span { color: var(--muted); line-height: 1.4; }
+.proposal-load-editor { max-width: 280px; margin: 8px 0 0; font-size: .9rem; }
+.proposal-load-editor input { margin-top: 6px; }
 .proposal-actions .button { flex: 1 1 220px; min-height: 48px; }
 
 pre {
@@ -208,6 +210,7 @@ pre {
 .exercise-card.completed { border-color: rgba(34, 197, 94, .7); }
 .exercise-header { padding: 18px; border-bottom: 1px solid var(--border); }
 .exercise-header h3 { margin-bottom: 5px; }
+.load-hint { margin: 6px 0 0; color: var(--warning); font-size: .82rem; }
 .exercise-body { padding: 14px 18px 18px; }
 
 .set-table { width: 100%; border-collapse: collapse; }
@@ -216,6 +219,7 @@ pre {
 .set-table input[type="number"] { min-width: 75px; padding: 9px; }
 .set-table input[type="checkbox"] { width: 23px; height: 23px; accent-color: var(--primary); }
 .set-number { width: 44px; color: var(--muted); font-weight: 800; }
+.bodyweight-value { color: var(--muted); font-size: .82rem; overflow-wrap: anywhere; }
 
 .exercise-options {
   display: grid;
@@ -243,6 +247,7 @@ footer { padding: 10px 0 30px; text-align: center; font-size: .85rem; }
   .button-row { flex-direction: column; }
   .button-row .button { width: 100%; }
   .suggestion-button { flex-basis: calc(50% - 4px); }
+  .proposal-load-editor { max-width: none; }
   .exercise-options { grid-template-columns: 1fr; }
   .set-table th:nth-child(1), .set-table td:nth-child(1) { display: none; }
   .set-table input[type="number"] { min-width: 0; }

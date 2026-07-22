@@ -11,7 +11,8 @@ Gebruik exact deze structuur:
       "name": "Naam van de oefening",
       "plannedSets": 3,
       "plannedRepetitions": 8,
-      "plannedWeight": 60
+      "plannedWeight": 60,
+      "loadType": "weight"
     }
   ]
 }
@@ -19,8 +20,12 @@ Gebruik exact deze structuur:
 Regels:
 - plannedSets is een heel getal tussen 1 en 20.
 - plannedRepetitions is een getal.
-- plannedWeight is een getal in kilogrammen.
-- Gebruik 0 als er geen gewicht van toepassing is, bijvoorbeeld bij lichaamsgewichtoefeningen.
+- plannedWeight is een getal; de betekenis wordt bepaald door loadType.
+- loadType is optioneel en is weight, assistance, plates of bodyweight.
+- Bij weight is plannedWeight het aantal kilogrammen.
+- Bij assistance is plannedWeight het aantal kilogrammen hulpgewicht.
+- Bij plates is plannedWeight een geheel aantal platen.
+- Gebruik bij bodyweight altijd plannedWeight 0.
 - Gebruik geen extra velden.
 
 Mijn doel en trainingsinformatie:
