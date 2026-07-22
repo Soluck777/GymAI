@@ -27,8 +27,51 @@
     </nav>
 
     <section id="importView" class="view active">
+      <div class="panel generator-panel">
+        <h2>Maak een trainingsvoorstel</h2>
+        <p>Beschrijf je niveau, locatie, trainingstype en beschikbare tijd. Alles wordt lokaal op dit apparaat samengesteld.</p>
+
+        <label for="generatorInput">Wat voor training wil je doen?</label>
+        <textarea id="generatorInput" rows="3" maxlength="240" aria-describedby="generatorHelp generatorMessage" placeholder="Bijvoorbeeld: Beginner, thuis, full body, 30 minuten"></textarea>
+        <p id="generatorHelp" class="generator-help muted">Kies één niveau, locatie, trainingstype en tijdsduur. Je kunt de suggesties hieronder gebruiken.</p>
+
+        <fieldset class="suggestion-group">
+          <legend>Snelle suggesties</legend>
+          <div id="generatorSuggestions" class="suggestion-list">
+            <button type="button" class="suggestion-button" data-option-category="level" data-option-value="beginner" aria-pressed="false">Beginner</button>
+            <button type="button" class="suggestion-button" data-option-category="level" data-option-value="gemiddeld" aria-pressed="false">Gemiddeld</button>
+            <button type="button" class="suggestion-button" data-option-category="level" data-option-value="gevorderd" aria-pressed="false">Gevorderd</button>
+            <button type="button" class="suggestion-button" data-option-category="trainingType" data-option-value="fullBody" aria-pressed="false">Full body</button>
+            <button type="button" class="suggestion-button" data-option-category="trainingType" data-option-value="push" aria-pressed="false">Push</button>
+            <button type="button" class="suggestion-button" data-option-category="trainingType" data-option-value="pull" aria-pressed="false">Pull</button>
+            <button type="button" class="suggestion-button" data-option-category="trainingType" data-option-value="benen" aria-pressed="false">Benen</button>
+            <button type="button" class="suggestion-button" data-option-category="trainingType" data-option-value="calisthenics" aria-pressed="false">Calisthenics</button>
+            <button type="button" class="suggestion-button" data-option-category="location" data-option-value="thuis" aria-pressed="false">Thuis</button>
+            <button type="button" class="suggestion-button" data-option-category="location" data-option-value="sportschool" aria-pressed="false">Sportschool</button>
+            <button type="button" class="suggestion-button" data-option-category="duration" data-option-value="20" aria-pressed="false">20 minuten</button>
+            <button type="button" class="suggestion-button" data-option-category="duration" data-option-value="30" aria-pressed="false">30 minuten</button>
+            <button type="button" class="suggestion-button" data-option-category="duration" data-option-value="45" aria-pressed="false">45 minuten</button>
+            <button type="button" class="suggestion-button" data-option-category="duration" data-option-value="60" aria-pressed="false">60 minuten</button>
+          </div>
+        </fieldset>
+
+        <button id="generateProposalButton" type="button" class="button primary generator-submit">Maak voorstel</button>
+        <p id="generatorMessage" class="message" aria-live="polite"></p>
+      </div>
+
+      <section id="proposalPreview" class="panel proposal-preview hidden" tabindex="-1" aria-labelledby="proposalTitle">
+        <p class="eyebrow">Trainingsvoorstel</p>
+        <h2 id="proposalTitle">Voorstel</h2>
+        <p id="proposalMeta" class="muted"></p>
+        <ol id="proposalExerciseList" class="proposal-exercise-list"></ol>
+        <div class="button-row wrap proposal-actions">
+          <button id="regenerateProposalButton" type="button" class="button secondary">Ander voorstel</button>
+          <button id="useProposalButton" type="button" class="button primary">Gebruik deze training</button>
+        </div>
+      </section>
+
       <div class="panel">
-        <h2>1. Trainingsplan importeren</h2>
+        <h2>Trainingsplan importeren</h2>
         <p>Plak hieronder een JSON-plan dat door een AI is gemaakt. Gebruik “Voorbeeld laden” om de app meteen te testen.</p>
 
         <label for="planInput">AI-trainingsplan</label>
