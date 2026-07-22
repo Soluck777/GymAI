@@ -1,0 +1,27 @@
+Maak een trainingsplan dat ik direct kan importeren in mijn Gym AI Logboek.
+
+Geef uitsluitend geldige JSON terug, zonder markdown, uitleg of tekst voor en na de JSON.
+Gebruik exact deze structuur:
+
+{
+  "workoutName": "Naam van de training",
+  "date": "JJJJ-MM-DD",
+  "exercises": [
+    {
+      "name": "Naam van de oefening",
+      "plannedSets": 3,
+      "plannedRepetitions": 8,
+      "plannedWeight": 60
+    }
+  ]
+}
+
+Regels:
+- plannedSets is een heel getal tussen 1 en 20.
+- plannedRepetitions is een getal.
+- plannedWeight is een getal in kilogrammen.
+- Gebruik 0 als er geen gewicht van toepassing is, bijvoorbeeld bij lichaamsgewichtoefeningen.
+- Gebruik geen extra velden.
+
+Mijn doel en trainingsinformatie:
+[PLAK HIER JOUW DOEL, NIVEAU, BESCHIKBARE APPARATUUR EN VOORKEUREN]

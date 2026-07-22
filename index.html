@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111827">
+  <meta name="description" content="Eenvoudig AI-trainingsplan importeren, uitvoeren en exporteren.">
+  <title>Gym AI Logboek</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">MVP</p>
+      <h1>Gym AI Logboek</h1>
+      <p class="subtitle">Van AI-trainingsplan naar echte resultaten en terug.</p>
+    </div>
+    <span id="saveStatus" class="status" aria-live="polite">Klaar</span>
+  </header>
+
+  <main class="app-shell">
+    <nav class="tabs" aria-label="Hoofdnavigatie">
+      <button class="tab active" data-view="importView">Importeren</button>
+      <button class="tab" data-view="workoutView">Training</button>
+      <button class="tab" data-view="historyView">Geschiedenis</button>
+    </nav>
+
+    <section id="importView" class="view active">
+      <div class="panel">
+        <h2>1. Trainingsplan importeren</h2>
+        <p>Plak hieronder een JSON-plan dat door een AI is gemaakt. Gebruik “Voorbeeld laden” om de app meteen te testen.</p>
+
+        <label for="planInput">AI-trainingsplan</label>
+        <textarea id="planInput" rows="16" spellcheck="false" placeholder='{"workoutName":"Push Day","exercises":[...]}'></textarea>
+
+        <div class="button-row">
+          <button id="loadExampleButton" class="button secondary">Voorbeeld laden</button>
+          <button id="importButton" class="button primary">Plan importeren</button>
+        </div>
+        <p id="importMessage" class="message" aria-live="polite"></p>
+      </div>
+
+      <div class="panel compact">
+        <h3>Verwacht formaat</h3>
+        <pre><code>{
+  "workoutName": "Push Day",
+  "date": "2026-07-21",
+  "exercises": [
+    {
+      "name": "Bench Press",
+      "plannedSets": 3,
+      "plannedRepetitions": 8,
+      "plannedWeight": 60
+    }
+  ]
+}</code></pre>
+      </div>
+    </section>
+
+    <section id="workoutView" class="view">
+      <div id="emptyWorkout" class="panel empty-state">
+        <h2>Nog geen training geladen</h2>
+        <p>Importeer eerst een trainingsplan of laad het voorbeeld.</p>
+        <button class="button primary" data-go="importView">Naar importeren</button>
+      </div>
+
+      <div id="workoutContent" class="hidden">
+        <div class="panel workout-heading">
+          <div>
+            <p class="eyebrow">Actieve training</p>
+            <h2 id="workoutTitle">Training</h2>
+            <p id="workoutDate" class="muted"></p>
+          </div>
+          <button id="resetWorkoutButton" class="button danger ghost">Training wissen</button>
+        </div>
+
+        <div id="exerciseList" class="exercise-list"></div>
+
+        <div class="panel finish-panel">
+          <label for="workoutNotes">Algemene trainingsnotitie</label>
+          <textarea id="workoutNotes" rows="4" placeholder="Bijvoorbeeld: weinig geslapen, goede energie, pijnvrij getraind..."></textarea>
+
+          <div class="button-row wrap">
+            <button id="exportJsonButton" class="button secondary">JSON downloaden</button>
+            <button id="copyTextButton" class="button secondary">AI-samenvatting kopiëren</button>
+            <button id="finishWorkoutButton" class="button primary">Training afronden</button>
+          </div>
+          <p id="workoutMessage" class="message" aria-live="polite"></p>
+        </div>
+      </div>
+    </section>
+
+    <section id="historyView" class="view">
+      <div class="panel">
+        <div class="section-heading">
+          <div>
+            <h2>Trainingsgeschiedenis</h2>
+            <p>Afgeronde trainingen blijven op dit apparaat opgeslagen.</p>
+          </div>
+          <button id="exportHistoryButton" class="button secondary">Alles exporteren</button>
+        </div>
+        <div id="historyList" class="history-list"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Gegevens worden automatisch in deze browser opgeslagen. Dit is nog geen cloudsynchronisatie.</p>
+  </footer>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
