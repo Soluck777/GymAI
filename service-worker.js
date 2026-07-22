@@ -1,4 +1,4 @@
-const CACHE_NAME = "gym-ai-logboek-v3";
+const CACHE_NAME = "gym-ai-logboek-v4";
 const APP_FILES = ["./", "./index.html", "./style.css", "./app.js", "./manifest.json"];
 
 self.addEventListener("install", (event) => {

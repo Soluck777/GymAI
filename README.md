@@ -3,7 +3,10 @@
 Een kleine webapp waarmee je:
 
 - een door AI gemaakt trainingsplan als JSON importeert;
+- lokaal een voorstel voor kracht, calisthenics of cardio maakt en volledig bewerkt;
+- oefeningen uit een centrale database zoekt, vervangt, toevoegt en verwijdert;
 - sets, herhalingen, gewicht, moeilijkheid en notities registreert;
+- cardio-intervallen en extra sets of intervallen registreert;
 - iedere wijziging automatisch in de browser opslaat;
 - een training na het sluiten van de browser kunt hervatten;
 - trainingsresultaten als JSON downloadt;
@@ -41,6 +44,7 @@ De gegevens staan alleen in `localStorage` van de gebruikte browser. Er is nog g
   "exercises": [
     {
       "name": "Bench Press",
+      "trackingType": "strength",
       "plannedSets": 3,
       "plannedRepetitions": 8,
       "plannedWeight": 60
@@ -48,6 +52,8 @@ De gegevens staan alleen in `localStorage` van de gebruikte browser. Er is nog g
   ]
 }
 ```
+
+Cardio-oefeningen gebruiken `"trackingType": "cardio"` en `plannedMinutes`. Oude plannen zonder `trackingType` en plannen met het oudere `loadType`-veld blijven als krachttraining werken.
 
 ## Mogelijke volgende stap
 

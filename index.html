@@ -46,6 +46,7 @@
             <button type="button" class="suggestion-button" data-option-category="trainingType" data-option-value="pull" aria-pressed="false">Pull</button>
             <button type="button" class="suggestion-button" data-option-category="trainingType" data-option-value="benen" aria-pressed="false">Benen</button>
             <button type="button" class="suggestion-button" data-option-category="trainingType" data-option-value="calisthenics" aria-pressed="false">Calisthenics</button>
+            <button type="button" class="suggestion-button" data-option-category="trainingType" data-option-value="cardio" aria-pressed="false">Cardio</button>
             <button type="button" class="suggestion-button" data-option-category="location" data-option-value="thuis" aria-pressed="false">Thuis</button>
             <button type="button" class="suggestion-button" data-option-category="location" data-option-value="sportschool" aria-pressed="false">Sportschool</button>
             <button type="button" class="suggestion-button" data-option-category="duration" data-option-value="20" aria-pressed="false">20 minuten</button>
@@ -64,6 +65,8 @@
         <h2 id="proposalTitle">Voorstel</h2>
         <p id="proposalMeta" class="muted"></p>
         <ol id="proposalExerciseList" class="proposal-exercise-list"></ol>
+        <button id="addProposalExerciseButton" type="button" class="button secondary proposal-add-button">+ Oefening toevoegen</button>
+        <div id="addExerciseSearch" class="exercise-search hidden"></div>
         <div class="button-row wrap proposal-actions">
           <button id="regenerateProposalButton" type="button" class="button secondary">Ander voorstel</button>
           <button id="useProposalButton" type="button" class="button primary">Gebruik deze training</button>
@@ -95,18 +98,18 @@
       "plannedSets": 3,
       "plannedRepetitions": 8,
       "plannedWeight": 60,
-      "loadType": "weight"
+      "trackingType": "strength"
     }
   ]
 }</code></pre>
-        <p class="muted">loadType is optioneel: weight, assistance, plates of bodyweight. Oude plannen zonder loadType blijven werken.</p>
+        <p class="muted">Gebruik trackingType “strength” of “cardio”. Cardio gebruikt plannedMinutes; oudere JSON-plannen blijven werken als krachttraining.</p>
       </div>
     </section>
 
     <section id="workoutView" class="view">
       <div id="emptyWorkout" class="panel empty-state">
         <h2>Nog geen training geladen</h2>
-        <p>Importeer eerst een trainingsplan of laad het voorbeeld.</p>
+        <p>Maak een trainingsvoorstel, importeer een trainingsplan of laad het voorbeeld.</p>
         <button class="button primary" data-go="importView">Naar importeren</button>
       </div>
 

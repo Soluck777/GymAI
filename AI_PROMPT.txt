@@ -12,21 +12,25 @@ Gebruik exact deze structuur:
       "plannedSets": 3,
       "plannedRepetitions": 8,
       "plannedWeight": 60,
-      "loadType": "weight"
+      "trackingType": "strength"
+    },
+    {
+      "name": "Naam van de cardio-oefening",
+      "plannedSets": 1,
+      "plannedMinutes": 15,
+      "plannedRepetitions": 0,
+      "plannedWeight": 0,
+      "trackingType": "cardio"
     }
   ]
 }
 
 Regels:
 - plannedSets is een heel getal tussen 1 en 20.
-- plannedRepetitions is een getal.
-- plannedWeight is een getal; de betekenis wordt bepaald door loadType.
-- loadType is optioneel en is weight, assistance, plates of bodyweight.
-- Bij weight is plannedWeight het aantal kilogrammen.
-- Bij assistance is plannedWeight het aantal kilogrammen hulpgewicht.
-- Bij plates is plannedWeight een geheel aantal platen.
-- Gebruik bij bodyweight altijd plannedWeight 0.
-- Gebruik geen extra velden.
+- trackingType is strength of cardio.
+- Bij strength zijn plannedRepetitions en plannedWeight getallen van 0 of hoger; plannedWeight is altijd in kilogrammen en mag 0 zijn.
+- Bij cardio gebruik je plannedMinutes als getal van 0 of hoger en zet je plannedRepetitions en plannedWeight op 0.
+- Gebruik alleen de velden uit de passende voorbeeldoefening hierboven.
 
 Mijn doel en trainingsinformatie:
 [PLAK HIER JOUW DOEL, NIVEAU, BESCHIKBARE APPARATUUR EN VOORKEUREN]

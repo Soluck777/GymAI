@@ -5,36 +5,162 @@ const STORAGE_KEYS = {
   history: "gymAiLogboek.history.v1"
 };
 
-const state = {
-  currentWorkout: loadFromStorage(STORAGE_KEYS.currentWorkout, null),
-  history: loadFromStorage(STORAGE_KEYS.history, [])
-};
+const LEVEL_RANK = { beginner: 0, gemiddeld: 1, gevorderd: 2 };
+const TRACKING_TYPES = new Set(["strength", "cardio"]);
 
-const examplePlan = {
-  workoutName: "Push Day",
-  date: new Date().toISOString().slice(0, 10),
-  exercises: [
-    { name: "Bench Press", plannedSets: 3, plannedRepetitions: 8, plannedWeight: 60, loadType: "weight" },
-    { name: "Shoulder Press", plannedSets: 3, plannedRepetitions: 10, plannedWeight: 20, loadType: "weight" },
-    { name: "Triceps Extension", plannedSets: 3, plannedRepetitions: 12, plannedWeight: 15, loadType: "weight" }
-  ]
+function strengthExercise(id, name, category, locations, minimumLevel, defaultSets, defaultRepetitions, defaultWeight = 0, progressionGroup = "", progressionLevel = "") {
+  return {
+    id,
+    name,
+    trackingType: "strength",
+    category,
+    locations,
+    minimumLevel,
+    defaultSets,
+    defaultRepetitions,
+    defaultWeight,
+    defaultMinutes: 0,
+    ...(progressionGroup ? { progressionGroup, progressionLevel } : {})
+  };
+}
+
+function cardioExercise(id, name, locations, minimumLevel = "beginner", defaultSets = 1, defaultMinutes = 15) {
+  return {
+    id,
+    name,
+    trackingType: "cardio",
+    category: "cardio",
+    locations,
+    minimumLevel,
+    defaultSets,
+    defaultRepetitions: 0,
+    defaultWeight: 0,
+    defaultMinutes
+  };
+}
+
+// Alle oefeningen staan op één plek. De generator, zoekfunctie en standaardwaarden
+// lezen uit deze database, zodat oefeningseigenschappen niet op meerdere plekken uiteenlopen.
+const EXERCISE_DATABASE = [
+  strengthExercise("bodyweight-squat", "Bodyweight Squat", "legs", ["beide"], "beginner", 3, 12),
+  strengthExercise("goblet-squat", "Goblet Squat", "fullBody", ["thuis", "sportschool"], "beginner", 3, 10),
+  strengthExercise("back-squat", "Back Squat", "legs", ["sportschool"], "gemiddeld", 3, 8),
+  strengthExercise("glute-bridge", "Glute Bridge", "legs", ["beide"], "beginner", 3, 14),
+  strengthExercise("hip-thrust", "Hip Thrust", "legs", ["sportschool"], "gemiddeld", 3, 10),
+  strengthExercise("reverse-lunge", "Reverse Lunge (per been)", "legs", ["beide"], "beginner", 3, 10),
+  strengthExercise("walking-lunge", "Walking Lunge (per been)", "legs", ["sportschool"], "gemiddeld", 3, 10),
+  strengthExercise("lateral-lunge", "Lateral Lunge (per been)", "legs", ["beide"], "beginner", 3, 10),
+  strengthExercise("bulgarian-split-squat", "Bulgarian Split Squat (per been)", "legs", ["beide"], "gemiddeld", 3, 8),
+  strengthExercise("single-leg-rdl", "Single-leg Romanian Deadlift", "legs", ["beide"], "gemiddeld", 3, 10),
+  strengthExercise("romanian-deadlift", "Romanian Deadlift", "fullBody", ["sportschool"], "gemiddeld", 3, 10),
+  strengthExercise("leg-press", "Leg Press", "legs", ["sportschool"], "beginner", 3, 10),
+  strengthExercise("leg-curl", "Leg Curl", "legs", ["sportschool"], "beginner", 3, 12),
+  strengthExercise("leg-extension", "Leg Extension", "legs", ["sportschool"], "beginner", 3, 12),
+  strengthExercise("calf-raise", "Calf Raise", "legs", ["beide"], "beginner", 3, 16),
+  strengthExercise("standing-calf-raise", "Standing Calf Raise", "legs", ["sportschool"], "beginner", 3, 14),
+  strengthExercise("wall-sit", "Wall Sit", "legs", ["beide"], "beginner", 3, 12),
+
+  strengthExercise("incline-push-up", "Incline Push-up", "push", ["beide"], "beginner", 3, 12, 0, "push-up", "beginner"),
+  strengthExercise("knee-push-up", "Knee Push-up", "push", ["beide"], "beginner", 3, 12, 0, "push-up", "beginner"),
+  strengthExercise("push-up", "Push-up", "push", ["beide"], "gemiddeld", 3, 10, 0, "push-up", "gemiddeld"),
+  strengthExercise("diamond-push-up", "Diamond Push-up", "push", ["beide"], "gevorderd", 4, 8, 0, "push-up", "gevorderd"),
+  strengthExercise("decline-push-up", "Decline Push-up", "push", ["beide"], "gevorderd", 4, 8, 0, "push-up", "gevorderd"),
+  strengthExercise("pike-push-up", "Pike Push-up", "push", ["beide"], "gemiddeld", 3, 8),
+  strengthExercise("bench-dip", "Bench Dip", "push", ["beide"], "beginner", 3, 10),
+  strengthExercise("bench-press", "Bench Press", "push", ["sportschool"], "gemiddeld", 3, 8),
+  strengthExercise("chest-press", "Chest Press", "push", ["sportschool"], "beginner", 3, 10),
+  strengthExercise("dumbbell-shoulder-press", "Dumbbell Shoulder Press", "push", ["sportschool"], "beginner", 3, 10),
+  strengthExercise("incline-dumbbell-press", "Incline Dumbbell Press", "push", ["sportschool"], "gemiddeld", 3, 10),
+  strengthExercise("cable-chest-fly", "Cable Chest Fly", "push", ["sportschool"], "beginner", 3, 12),
+  strengthExercise("lateral-raise", "Lateral Raise", "push", ["sportschool"], "beginner", 3, 12),
+  strengthExercise("triceps-pushdown", "Triceps Pushdown", "push", ["sportschool"], "beginner", 3, 12),
+  strengthExercise("overhead-triceps-extension", "Overhead Triceps Extension", "push", ["sportschool"], "beginner", 3, 12),
+  strengthExercise("shoulder-tap", "Shoulder Tap (per kant)", "core", ["beide"], "beginner", 3, 12),
+  strengthExercise("plank-up-down", "Plank Up-down", "core", ["beide"], "gemiddeld", 3, 10),
+
+  strengthExercise("assisted-pull-up", "Assisted Pull-up", "calisthenics", ["sportschool"], "beginner", 3, 8, 0, "pull-up", "beginner"),
+  strengthExercise("pull-up", "Pull-up", "calisthenics", ["beide"], "gevorderd", 4, 8, 0, "pull-up", "gevorderd"),
+  strengthExercise("assisted-dip", "Assisted Dip", "calisthenics", ["sportschool"], "beginner", 3, 8, 0, "dip", "beginner"),
+  strengthExercise("dip", "Dip", "calisthenics", ["beide"], "gevorderd", 4, 8, 0, "dip", "gevorderd"),
+  strengthExercise("lat-pulldown", "Lat Pulldown", "pull", ["sportschool"], "beginner", 3, 10),
+  strengthExercise("seated-row", "Seated Row", "pull", ["sportschool"], "beginner", 3, 10),
+  strengthExercise("seated-cable-row", "Seated Cable Row", "pull", ["sportschool"], "beginner", 3, 10),
+  strengthExercise("one-arm-dumbbell-row", "One-arm Dumbbell Row", "pull", ["sportschool"], "gemiddeld", 3, 10),
+  strengthExercise("backpack-row", "Rugzak Row (per arm)", "pull", ["thuis"], "beginner", 3, 12),
+  strengthExercise("superman-pull", "Superman Pull", "pull", ["thuis"], "beginner", 3, 12),
+  strengthExercise("reverse-snow-angel", "Reverse Snow Angel", "pull", ["thuis"], "beginner", 3, 12),
+  strengthExercise("prone-y-raise", "Prone Y Raise", "pull", ["thuis"], "beginner", 3, 10),
+  strengthExercise("bird-dog", "Bird Dog (per kant)", "core", ["beide"], "beginner", 3, 10),
+  strengthExercise("towel-biceps-curl", "Handdoek Biceps Curl", "pull", ["thuis"], "beginner", 3, 12),
+  strengthExercise("face-pull", "Face Pull", "pull", ["sportschool"], "beginner", 3, 12),
+  strengthExercise("rear-delt-fly", "Rear Delt Fly", "pull", ["sportschool"], "beginner", 3, 12),
+  strengthExercise("dumbbell-curl", "Dumbbell Curl", "pull", ["sportschool"], "beginner", 3, 12),
+  strengthExercise("hammer-curl", "Hammer Curl", "pull", ["sportschool"], "beginner", 3, 10),
+  strengthExercise("straight-arm-pulldown", "Straight-arm Pulldown", "pull", ["sportschool"], "gemiddeld", 3, 12),
+
+  strengthExercise("box-squat", "Box Squat", "legs", ["beide"], "beginner", 3, 10, 0, "pistol-squat", "beginner"),
+  strengthExercise("assisted-squat", "Assisted Squat", "legs", ["beide"], "beginner", 3, 10, 0, "pistol-squat", "beginner"),
+  strengthExercise("pistol-squat-bench", "Pistol Squat naar bank (per been)", "calisthenics", ["beide"], "gemiddeld", 3, 8, 0, "pistol-squat", "gemiddeld"),
+  strengthExercise("pistol-squat", "Pistol Squat (per been)", "calisthenics", ["beide"], "gevorderd", 4, 6, 0, "pistol-squat", "gevorderd"),
+  strengthExercise("hanging-knee-raise", "Hanging Knee Raise", "core", ["sportschool"], "gemiddeld", 3, 10),
+  strengthExercise("inverted-row", "Inverted Row", "calisthenics", ["sportschool"], "gemiddeld", 3, 10),
+  strengthExercise("scapular-pull-up", "Scapular Pull-up", "calisthenics", ["beide"], "gemiddeld", 3, 10),
+  strengthExercise("l-sit-knee-tuck", "L-sit Knee Tuck", "core", ["beide"], "gemiddeld", 3, 10),
+  strengthExercise("hollow-body-crunch", "Hollow Body Crunch", "core", ["beide"], "beginner", 3, 12),
+  strengthExercise("bear-crawl", "Bear Crawl (passen)", "calisthenics", ["beide"], "beginner", 3, 16),
+  strengthExercise("mountain-climber", "Mountain Climber (per kant)", "cardio", ["beide"], "beginner", 3, 16),
+  strengthExercise("dead-bug", "Dead Bug (per kant)", "core", ["beide"], "beginner", 3, 10),
+  strengthExercise("superman", "Superman", "fullBody", ["thuis"], "beginner", 3, 12),
+  strengthExercise("cable-pallof-press", "Cable Pallof Press (per kant)", "core", ["sportschool"], "beginner", 3, 10),
+
+  cardioExercise("treadmill", "Loopband", ["sportschool"]),
+  cardioExercise("exercise-bike", "Hometrainer", ["beide"]),
+  cardioExercise("rowing-machine", "Roeimachine", ["sportschool"]),
+  cardioExercise("cross-trainer", "Crosstrainer", ["sportschool"]),
+  cardioExercise("stairmaster", "Stairmaster", ["sportschool"], "gemiddeld", 1, 10),
+  cardioExercise("walking", "Wandelen", ["beide"]),
+  cardioExercise("running", "Hardlopen", ["beide"], "gemiddeld"),
+  cardioExercise("cycling", "Fietsen", ["beide"])
+];
+
+const EXERCISE_BY_ID = new Map(EXERCISE_DATABASE.map((exercise) => [exercise.id, exercise]));
+
+const GENERATOR_BLUEPRINTS = {
+  fullBody: {
+    thuis: ["bodyweight-squat", "@push-up", "glute-bridge", "reverse-lunge", "superman", "dead-bug", "pike-push-up", "mountain-climber"],
+    sportschool: ["goblet-squat", "chest-press", "lat-pulldown", "romanian-deadlift", "seated-row", "dumbbell-shoulder-press", "leg-curl", "cable-pallof-press"]
+  },
+  push: {
+    thuis: ["@push-up", "pike-push-up", "bench-dip", "shoulder-tap", "plank-up-down", "incline-push-up", "knee-push-up", "diamond-push-up"],
+    sportschool: ["bench-press", "dumbbell-shoulder-press", "incline-dumbbell-press", "cable-chest-fly", "lateral-raise", "triceps-pushdown", "chest-press", "overhead-triceps-extension"]
+  },
+  pull: {
+    thuis: ["backpack-row", "superman-pull", "reverse-snow-angel", "prone-y-raise", "bird-dog", "towel-biceps-curl", "superman", "scapular-pull-up"],
+    sportschool: ["lat-pulldown", "seated-cable-row", "one-arm-dumbbell-row", "face-pull", "rear-delt-fly", "dumbbell-curl", "straight-arm-pulldown", "hammer-curl"]
+  },
+  benen: {
+    thuis: ["bodyweight-squat", "reverse-lunge", "glute-bridge", "bulgarian-split-squat", "single-leg-rdl", "calf-raise", "wall-sit", "lateral-lunge"],
+    sportschool: ["back-squat", "romanian-deadlift", "leg-press", "walking-lunge", "leg-curl", "leg-extension", "standing-calf-raise", "hip-thrust"]
+  },
+  calisthenics: {
+    thuis: ["@push-up", "bodyweight-squat", "@pistol-squat", "pike-push-up", "hollow-body-crunch", "bear-crawl", "glute-bridge", "mountain-climber"],
+    sportschool: ["@pull-up", "@dip", "@push-up", "hanging-knee-raise", "inverted-row", "@pistol-squat", "scapular-pull-up", "l-sit-knee-tuck"]
+  },
+  cardio: {
+    thuis: ["walking", "exercise-bike", "cycling", "running"],
+    sportschool: ["treadmill", "exercise-bike", "rowing-machine", "cross-trainer", "stairmaster"]
+  }
 };
 
 const GENERATOR_OPTION_LABELS = {
   level: { beginner: "Beginner", gemiddeld: "Gemiddeld", gevorderd: "Gevorderd" },
   location: { thuis: "Thuis", sportschool: "Sportschool" },
-  trainingType: {
-    fullBody: "Full body",
-    push: "Push",
-    pull: "Pull",
-    benen: "Benen",
-    calisthenics: "Calisthenics"
-  },
+  trainingType: { fullBody: "Full body", push: "Push", pull: "Pull", benen: "Benen", calisthenics: "Calisthenics", cardio: "Cardio" },
   duration: { 20: "20 minuten", 30: "30 minuten", 45: "45 minuten", 60: "60 minuten" }
 };
 
-// Deze patronen herkennen gangbare Nederlandse en Engelse woorden uit vrije invoer.
-// Per categorie bewaren we alle treffers, zodat tegenstrijdige keuzes als onduidelijk worden gemeld.
+// Vrije tekst wordt per categorie herkend. Meerdere treffers binnen één categorie
+// worden als conflict gemeld, zodat de generator niet stilzwijgend een keuze gokt.
 const GENERATOR_PATTERNS = {
   level: [
     { value: "beginner", pattern: /\b(?:beginner|beginnend(?:e)?|starter|novice)\b/i },
@@ -50,7 +176,8 @@ const GENERATOR_PATTERNS = {
     { value: "push", pattern: /\bpush(?![\s-]*up\b)(?:\s+day|training)?\b/i },
     { value: "pull", pattern: /\bpull(?![\s-]*up\b)(?:\s+day|training)?\b/i },
     { value: "benen", pattern: /\b(?:benen(?:training)?|leg\s*day|legs|lower[\s-]*body)\b/i },
-    { value: "calisthenics", pattern: /\b(?:calisthenics|bodyweight|lichaamsgewicht)\b/i }
+    { value: "calisthenics", pattern: /\b(?:calisthenics|bodyweight|lichaamsgewicht)\b/i },
+    { value: "cardio", pattern: /\b(?:cardio|conditie|duurtraining)\b/i }
   ],
   duration: [
     { value: "20", pattern: /\b20\s*(?:min(?:uut|uten)?|m)\b/i },
@@ -60,11 +187,10 @@ const GENERATOR_PATTERNS = {
   ]
 };
 
-// Bij een suggestieklik vervangen deze patronen een bestaande keuze uit dezelfde categorie.
 const GENERATOR_REPLACEMENT_PATTERNS = {
   level: /\b(?:beginner|beginnend(?:e)?|starter|novice|gemiddeld(?:e)?|intermediate|gevorderd(?:e)?|advanced|ervaren)\b/gi,
   location: /\b(?:thuis|home|sportschool|gym|fitnesscentrum|fitness)\b/gi,
-  trainingType: /\b(?:full[\s-]*body|fullbody|hele\s+lichaam|push(?![\s-]*up\b)(?:\s+day|training)?|pull(?![\s-]*up\b)(?:\s+day|training)?|benen(?:training)?|leg\s*day|legs|lower[\s-]*body|calisthenics|bodyweight|lichaamsgewicht)\b/gi,
+  trainingType: /\b(?:full[\s-]*body|fullbody|hele\s+lichaam|push(?![\s-]*up\b)(?:\s+day|training)?|pull(?![\s-]*up\b)(?:\s+day|training)?|benen(?:training)?|leg\s*day|legs|lower[\s-]*body|calisthenics|bodyweight|lichaamsgewicht|cardio|conditie|duurtraining)\b/gi,
   duration: /\b\d{1,3}\s*(?:min(?:uut|uten)?|m)\b|\b(?:20|30|45|60)\b|(?:\b(?:half|een|1)|\u00e9\u00e9n)\s+uur\b/gi
 };
 
@@ -81,162 +207,70 @@ const GENERATOR_LEVEL_SETTINGS = {
   gevorderd: { exerciseModifier: 1, baseSets: 4, repetitionModifier: 2 }
 };
 
-const SUPPORTED_LOAD_TYPES = new Set(["weight", "assistance", "plates", "bodyweight"]);
+const CARDIO_TIME_SETTINGS = {
+  20: { exerciseCount: 1 },
+  30: { exerciseCount: 2 },
+  45: { exerciseCount: 2 },
+  60: { exerciseCount: 3 }
+};
 
-// Deze namen zijn duidelijk lichaamsgewichtoefeningen wanneer een oud plan geen loadType heeft.
-// Assisted-oefeningen worden apart als hulpgewicht behandeld en vallen nooit in deze lijst.
-const BODYWEIGHT_EXERCISE_PATTERNS = [
-  /\bbodyweight\b/,
-  /\bpush up\b/,
-  /\bpull up\b/,
-  /\b(?:bench )?dip\b/,
-  /\bglute bridge\b/,
-  /\b(?:reverse|lateral|walking) lunge\b/,
-  /\bbulgarian split squat\b/,
-  /\bsingle leg romanian deadlift\b/,
-  /\bsuperman\b/,
-  /\bdead bug\b/,
-  /\bmountain climber\b/,
-  /\bshoulder tap\b/,
-  /\bplank\b/,
-  /\breverse snow angel\b/,
-  /\bprone [yw] raise\b/,
-  /\bbird dog\b/,
-  /\bcobra hold\b/,
-  /\bscapular\b/,
-  /\bcalf raise\b/,
-  /\bwall sit\b/,
-  /\bhollow body\b/,
-  /\bbear crawl\b/,
-  /\bhanging knee raise\b/,
-  /\binverted row\b/,
-  /\bpistol squat\b/,
-  /\bl sit\b/
-];
-
-// Gecontroleerde sjablonen houden de generator voorspelbaar en volledig offline.
-// Elk trainingstype heeft een thuis- en sportschoolvariant. Onbekende belastingen starten op 0
-// en worden alleen vanuit de gewone tekstinvoer of het bewerkbare voorstel ingevuld.
-const WORKOUT_TEMPLATES = {
-  fullBody: {
-    thuis: [
-      { name: "Bodyweight Squat", repetitions: 12, weight: 0 },
-      { name: "Push-up", repetitions: 10, weight: 0 },
-      { name: "Glute Bridge", repetitions: 14, weight: 0 },
-      { name: "Reverse Lunge (per been)", repetitions: 10, weight: 0 },
-      { name: "Superman", repetitions: 12, weight: 0 },
-      { name: "Dead Bug (per kant)", repetitions: 10, weight: 0 },
-      { name: "Pike Push-up", repetitions: 8, weight: 0 },
-      { name: "Mountain Climber (per kant)", repetitions: 16, weight: 0 }
-    ],
-    sportschool: [
-      { name: "Goblet Squat", repetitions: 10, weight: 0 },
-      { name: "Chest Press", repetitions: 10, weight: 0 },
-      { name: "Lat Pulldown", repetitions: 10, weight: 0 },
-      { name: "Romanian Deadlift", repetitions: 10, weight: 0 },
-      { name: "Seated Row", repetitions: 10, weight: 0 },
-      { name: "Dumbbell Shoulder Press", repetitions: 10, weight: 0 },
-      { name: "Leg Curl", repetitions: 12, weight: 0 },
-      { name: "Cable Pallof Press (per kant)", repetitions: 10, weight: 0 }
-    ]
-  },
-  push: {
-    thuis: [
-      { name: "Push-up", repetitions: 10, weight: 0 },
-      { name: "Pike Push-up", repetitions: 8, weight: 0 },
-      { name: "Incline Push-up", repetitions: 12, weight: 0 },
-      { name: "Diamond Push-up", repetitions: 8, weight: 0 },
-      { name: "Bench Dip", repetitions: 10, weight: 0 },
-      { name: "Shoulder Tap (per kant)", repetitions: 12, weight: 0 },
-      { name: "Knee Push-up", repetitions: 14, weight: 0 },
-      { name: "Plank Up-down", repetitions: 10, weight: 0 }
-    ],
-    sportschool: [
-      { name: "Bench Press", repetitions: 8, weight: 0 },
-      { name: "Dumbbell Shoulder Press", repetitions: 10, weight: 0 },
-      { name: "Incline Dumbbell Press", repetitions: 10, weight: 0 },
-      { name: "Cable Chest Fly", repetitions: 12, weight: 0 },
-      { name: "Lateral Raise", repetitions: 12, weight: 0 },
-      { name: "Triceps Pushdown", repetitions: 12, weight: 0 },
-      { name: "Chest Press", repetitions: 10, weight: 0 },
-      { name: "Overhead Triceps Extension", repetitions: 12, weight: 0 }
-    ]
-  },
-  pull: {
-    thuis: [
-      { name: "Rugzak Row (per arm)", repetitions: 12, weight: 0 },
-      { name: "Superman Pull", repetitions: 12, weight: 0 },
-      { name: "Reverse Snow Angel", repetitions: 12, weight: 0 },
-      { name: "Prone Y Raise", repetitions: 10, weight: 0 },
-      { name: "Bird Dog (per kant)", repetitions: 10, weight: 0 },
-      { name: "Handdoek Biceps Curl", repetitions: 12, weight: 0 },
-      { name: "Cobra Hold", repetitions: 10, weight: 0 },
-      { name: "Scapular Push-up", repetitions: 12, weight: 0 }
-    ],
-    sportschool: [
-      { name: "Lat Pulldown", repetitions: 10, weight: 0 },
-      { name: "Seated Cable Row", repetitions: 10, weight: 0 },
-      { name: "One-arm Dumbbell Row", repetitions: 10, weight: 0 },
-      { name: "Face Pull", repetitions: 12, weight: 0 },
-      { name: "Rear Delt Fly", repetitions: 12, weight: 0 },
-      { name: "Dumbbell Curl", repetitions: 12, weight: 0 },
-      { name: "Straight-arm Pulldown", repetitions: 12, weight: 0 },
-      { name: "Hammer Curl", repetitions: 10, weight: 0 }
-    ]
-  },
-  benen: {
-    thuis: [
-      { name: "Bodyweight Squat", repetitions: 14, weight: 0 },
-      { name: "Reverse Lunge (per been)", repetitions: 10, weight: 0 },
-      { name: "Glute Bridge", repetitions: 14, weight: 0 },
-      { name: "Bulgarian Split Squat (per been)", repetitions: 8, weight: 0 },
-      { name: "Single-leg Romanian Deadlift", repetitions: 10, weight: 0 },
-      { name: "Calf Raise", repetitions: 16, weight: 0 },
-      { name: "Wall Sit", repetitions: 12, weight: 0 },
-      { name: "Lateral Lunge (per been)", repetitions: 10, weight: 0 }
-    ],
-    sportschool: [
-      { name: "Back Squat", repetitions: 8, weight: 0 },
-      { name: "Romanian Deadlift", repetitions: 10, weight: 0 },
-      { name: "Leg Press", repetitions: 10, weight: 0 },
-      { name: "Walking Lunge (per been)", repetitions: 10, weight: 0 },
-      { name: "Leg Curl", repetitions: 12, weight: 0 },
-      { name: "Leg Extension", repetitions: 12, weight: 0 },
-      { name: "Standing Calf Raise", repetitions: 14, weight: 0 },
-      { name: "Hip Thrust", repetitions: 10, weight: 0 }
-    ]
-  },
-  calisthenics: {
-    thuis: [
-      { name: "Bodyweight Squat", repetitions: 14, weight: 0 },
-      { name: "Push-up", repetitions: 10, weight: 0 },
-      { name: "Reverse Lunge (per been)", repetitions: 10, weight: 0 },
-      { name: "Pike Push-up", repetitions: 8, weight: 0 },
-      { name: "Hollow Body Crunch", repetitions: 12, weight: 0 },
-      { name: "Bear Crawl (passen)", repetitions: 16, weight: 0 },
-      { name: "Glute Bridge", repetitions: 14, weight: 0 },
-      { name: "Mountain Climber (per kant)", repetitions: 16, weight: 0 },
-      { name: "Pull-up", repetitions: 8, weight: 0 },
-      { name: "Dip", repetitions: 8, weight: 0 }
-    ],
-    sportschool: [
-      { name: "Assisted Pull-up", repetitions: 8, weight: 0 },
-      { name: "Assisted Dip", repetitions: 8, weight: 0 },
-      { name: "Push-up", repetitions: 12, weight: 0 },
-      { name: "Hanging Knee Raise", repetitions: 10, weight: 0 },
-      { name: "Inverted Row", repetitions: 10, weight: 0 },
-      { name: "Pistol Squat naar bank (per been)", repetitions: 8, weight: 0 },
-      { name: "Scapular Pull-up", repetitions: 10, weight: 0 },
-      { name: "L-sit Knee Tuck", repetitions: 10, weight: 0 },
-      { name: "Pull-up", repetitions: 8, weight: 0 },
-      { name: "Dip", repetitions: 8, weight: 0 }
-    ]
+function loadFromStorage(key, fallbackValue) {
+  try {
+    const storedValue = localStorage.getItem(key);
+    return storedValue ? JSON.parse(storedValue) : fallbackValue;
+  } catch (error) {
+    console.error("Kon opgeslagen gegevens niet lezen:", error);
+    return fallbackValue;
   }
+}
+
+function resolveTrackingType(exercise) {
+  return String(exercise?.trackingType || "").trim() === "cardio" ? "cardio" : "strength";
+}
+
+// Oude actieve trainingen en geschiedenis kunnen loadType bevatten of trackingType missen.
+// Alle oude loadType-varianten worden kracht; bestaande setwaarden, notities en statussen blijven staan.
+function migrateStoredWorkout(workout) {
+  if (!workout || typeof workout !== "object" || !Array.isArray(workout.exercises)) return workout;
+  return {
+    ...workout,
+    exercises: workout.exercises.map((exercise) => {
+      const trackingType = resolveTrackingType(exercise);
+      const { loadType: _legacyLoadType, ...exerciseWithoutLegacyType } = exercise;
+      const completedSets = Array.isArray(exercise.completedSets) ? exercise.completedSets : [];
+      return {
+        ...exerciseWithoutLegacyType,
+        trackingType,
+        plannedRepetitions: trackingType === "strength" ? numberOrZero(exercise.plannedRepetitions) : 0,
+        plannedWeight: trackingType === "strength" ? numberOrZero(exercise.plannedWeight) : 0,
+        plannedMinutes: trackingType === "cardio" ? numberOrZero(exercise.plannedMinutes) : 0,
+        completedSets: completedSets.map((set) => trackingType === "cardio"
+          ? { ...set, minutes: numberOrZero(set.minutes), completed: Boolean(set.completed) }
+          : { ...set, weight: numberOrZero(set.weight), repetitions: numberOrZero(set.repetitions), completed: Boolean(set.completed) })
+      };
+    })
+  };
+}
+
+const state = {
+  currentWorkout: migrateStoredWorkout(loadFromStorage(STORAGE_KEYS.currentWorkout, null)),
+  history: loadFromStorage(STORAGE_KEYS.history, []).map(migrateStoredWorkout)
+};
+
+const examplePlan = {
+  workoutName: "Push Day",
+  date: new Date().toISOString().slice(0, 10),
+  exercises: [
+    { name: "Bench Press", trackingType: "strength", plannedSets: 3, plannedRepetitions: 8, plannedWeight: 60 },
+    { name: "Shoulder Press", trackingType: "strength", plannedSets: 3, plannedRepetitions: 10, plannedWeight: 20 },
+    { name: "Triceps Extension", trackingType: "strength", plannedSets: 3, plannedRepetitions: 12, plannedWeight: 15 }
+  ]
 };
 
 let generatedPlan = null;
 let generatedPreferences = null;
 let proposalVariant = 0;
+let proposalSearchState = null;
 
 const elements = {
   tabs: document.querySelectorAll(".tab"),
@@ -249,6 +283,8 @@ const elements = {
   proposalTitle: document.querySelector("#proposalTitle"),
   proposalMeta: document.querySelector("#proposalMeta"),
   proposalExerciseList: document.querySelector("#proposalExerciseList"),
+  addProposalExerciseButton: document.querySelector("#addProposalExerciseButton"),
+  addExerciseSearch: document.querySelector("#addExerciseSearch"),
   planInput: document.querySelector("#planInput"),
   importMessage: document.querySelector("#importMessage"),
   workoutMessage: document.querySelector("#workoutMessage"),
@@ -261,15 +297,10 @@ const elements = {
   historyList: document.querySelector("#historyList")
 };
 
-function loadFromStorage(key, fallbackValue) {
-  try {
-    const storedValue = localStorage.getItem(key);
-    return storedValue ? JSON.parse(storedValue) : fallbackValue;
-  } catch (error) {
-    console.error("Kon opgeslagen gegevens niet lezen:", error);
-    return fallbackValue;
-  }
-}
+const missingElements = Object.entries(elements)
+  .filter(([, value]) => !value || (value instanceof NodeList && value.length === 0))
+  .map(([name]) => name);
+if (missingElements.length) throw new Error(`Ontbrekende HTML-elementen: ${missingElements.join(", ")}`);
 
 function saveState() {
   try {
@@ -301,141 +332,36 @@ function showMessage(element, text, type = "") {
 }
 
 function normalizeGeneratorText(value) {
-  return String(value)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
+  return String(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
 function normalizeExerciseText(value) {
-  return normalizeGeneratorText(value)
-    .replace(/[-–—]/g, " ")
-    .replace(/\([^)]*\)/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return normalizeGeneratorText(value).replace(/[-–—]/g, " ").replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
 }
 
-// loadType is optioneel voor oude plannen. Assisted-oefeningen zijn altijd hulpgewicht;
-// duidelijke lichaamsgewichtoefeningen met gewicht 0 worden automatisch herkend.
-function resolveLoadType(exercise) {
-  const explicitLoadType = String(exercise.loadType || "").trim();
-  if (SUPPORTED_LOAD_TYPES.has(explicitLoadType)) return explicitLoadType;
-
-  const normalizedName = normalizeExerciseText(exercise.name);
-  if (/\bassisted\b/.test(normalizedName)) return "assistance";
-  if (numberOrZero(exercise.plannedWeight) === 0 && BODYWEIGHT_EXERCISE_PATTERNS.some((pattern) => pattern.test(normalizedName))) {
-    return "bodyweight";
-  }
-  return "weight";
+function normalizeExerciseSearchText(value) {
+  return normalizeExerciseText(value).replace(/\broeien\b/g, "roei");
 }
 
-function formatLoadValue(loadType, value) {
-  const numericValue = Math.max(0, numberOrZero(value));
-  if (loadType === "bodyweight") return "lichaamsgewicht";
-  if (loadType === "assistance") return numericValue > 0 ? `${numericValue} kg hulpgewicht` : "hulpgewicht zelf invullen";
-  if (loadType === "plates") return numericValue > 0 ? `${Math.round(numericValue)} platen` : "aantal platen zelf invullen";
-  return numericValue > 0 ? `${numericValue} kg` : "gewicht zelf invullen";
+function numberOrZero(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function formatPlannedExercise(exercise) {
-  return `${exercise.plannedSets} × ${exercise.plannedRepetitions || "-"} met ${formatLoadValue(resolveLoadType(exercise), exercise.plannedWeight)}`;
-}
-
-function loadInputLabel(loadType) {
-  return ({
-    weight: "Gepland gewicht (kg)",
-    assistance: "Gepland hulpgewicht (kg)",
-    plates: "Gepland aantal platen"
-  })[loadType] || "";
-}
-
-function loadColumnLabel(loadType) {
-  return ({ weight: "Kg", assistance: "Hulpgewicht", plates: "Platen", bodyweight: "Lichaamsgewicht" })[loadType];
-}
-
-function getExercisePromptAliases(exerciseName) {
-  const normalizedName = normalizeExerciseText(exerciseName);
-  const aliases = [normalizedName];
-  if (normalizedName.startsWith("bodyweight ")) aliases.push(normalizedName.replace(/^bodyweight\s+/, ""));
-  return [...new Set(aliases)].sort((a, b) => b.length - a.length);
-}
-
-function isExerciseAliasBoundary(text, start, end) {
-  const before = text[start - 1] || " ";
-  const after = text[end] || " ";
-  return !/[a-z0-9]/.test(before) && !/[a-z0-9]/.test(after);
-}
-
-function findExerciseMentions(input, templateExercises) {
-  const normalizedInput = normalizeExerciseText(input);
-  const candidates = [];
-
-  templateExercises.forEach((exercise) => {
-    getExercisePromptAliases(exercise.name).forEach((alias) => {
-      let index = normalizedInput.indexOf(alias);
-      while (index !== -1) {
-        const end = index + alias.length;
-        if (isExerciseAliasBoundary(normalizedInput, index, end)) {
-          candidates.push({ exercise, index, end, aliasLength: alias.length });
-        }
-        index = normalizedInput.indexOf(alias, index + 1);
-      }
-    });
-  });
-
-  candidates.sort((a, b) => a.index - b.index || b.aliasLength - a.aliasLength);
-  const mentions = [];
-  const mentionedNames = new Set();
-  candidates.forEach((candidate) => {
-    const overlaps = mentions.some((mention) => candidate.index < mention.end && candidate.end > mention.index);
-    if (!overlaps && !mentionedNames.has(candidate.exercise.name)) {
-      mentions.push(candidate);
-      mentionedNames.add(candidate.exercise.name);
-    }
-  });
-
-  mentions.sort((a, b) => a.index - b.index);
-  return mentions.map((mention, index) => {
-    const segmentEnd = mentions[index + 1]?.index ?? normalizedInput.length;
-    const segment = normalizedInput.slice(mention.index, segmentEnd);
-    const defaultLoadType = resolveLoadType({ name: mention.exercise.name, plannedWeight: 0 });
-    return { ...mention, loadOverride: parseExerciseLoad(segment, defaultLoadType) };
-  });
-}
-
-// Alleen de tekst vanaf een genoemde oefening tot de volgende genoemde oefening wordt gelezen.
-// Daardoor hoort bijvoorbeeld 45 kg bij Assisted Pull-up en niet ook bij Assisted Dip.
-function parseExerciseLoad(segment, defaultLoadType) {
-  if (/\b(?:lichaamsgewicht|bodyweight)\b/.test(segment)) {
-    return { loadType: "bodyweight", plannedWeight: 0 };
-  }
-
-  const platesMatch = segment.match(/\b(\d+)\s*(?:plaat|platen|plate|plates)\b/);
-  if (platesMatch) {
-    return { loadType: "plates", plannedWeight: Number(platesMatch[1]) };
-  }
-
-  const weightMatch = segment.match(/\b(\d+(?:[.,]\d+)?)\s*(?:kg|kilo(?:gram)?|kilos|kilogrammen)\b/);
-  const usesAssistance = defaultLoadType === "assistance" || /\b(?:hulpgewicht|hulp|assistance|assisted)\b/.test(segment);
-  if (weightMatch) {
-    return {
-      loadType: usesAssistance ? "assistance" : "weight",
-      plannedWeight: Number(weightMatch[1].replace(",", "."))
-    };
-  }
-
-  return usesAssistance ? { loadType: "assistance", plannedWeight: 0 } : null;
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 function getGeneratorMatches(input, category) {
   const normalizedInput = normalizeGeneratorText(input);
-  return GENERATOR_PATTERNS[category]
-    .filter((option) => option.pattern.test(normalizedInput))
-    .map((option) => option.value);
+  return GENERATOR_PATTERNS[category].filter((option) => option.pattern.test(normalizedInput)).map((option) => option.value);
 }
 
-// Vrije invoer wordt per categorie herkend. Ontbrekende of dubbele keuzes leveren
-// bewust geen gok op: de gebruiker krijgt dan een concrete melding om de invoer aan te vullen.
 function parseGeneratorInput(input) {
   const trimmedInput = String(input).trim();
   const categories = Object.keys(GENERATOR_PATTERNS);
@@ -470,16 +396,14 @@ function generatorOptionLabel(category, value) {
 }
 
 function describeGeneratorInputError(result) {
-  if (result.isEmpty) {
-    return "Beschrijf eerst je training, bijvoorbeeld: Beginner, thuis, full body, 30 minuten.";
-  }
+  if (result.isEmpty) return "Beschrijf eerst je training, bijvoorbeeld: Beginner, thuis, full body, 30 minuten.";
 
   const errors = [];
   const categoryNames = { level: "niveau", location: "locatie", trainingType: "trainingstype", duration: "tijdsduur" };
   const categoryExamples = {
     level: "Beginner, Gemiddeld of Gevorderd",
     location: "Thuis of Sportschool",
-    trainingType: "Full body, Push, Pull, Benen of Calisthenics",
+    trainingType: "Full body, Push, Pull, Benen, Calisthenics of Cardio",
     duration: "20, 30, 45 of 60 minuten"
   };
 
@@ -487,15 +411,12 @@ function describeGeneratorInputError(result) {
     const found = result.matches[category].map((value) => generatorOptionLabel(category, value)).join(" en ");
     errors.push(`Kies één ${categoryNames[category]} (gevonden: ${found})`);
   });
-
   if (result.unsupportedDurations.length) {
     errors.push(`Tijdsduur ${result.unsupportedDurations.join(" of ")} minuten wordt niet ondersteund; kies 20, 30, 45 of 60 minuten`);
   }
-
   result.missing
     .filter((category) => category !== "duration" || result.unsupportedDurations.length === 0)
     .forEach((category) => errors.push(`Voeg ${categoryNames[category]} toe (${categoryExamples[category]})`));
-
   return `Je invoer is nog onduidelijk. ${errors.join(". ")}.`;
 }
 
@@ -507,86 +428,244 @@ function replaceGeneratorOption(input, category, value) {
     hasReplacedOption = true;
     return label;
   });
-
   updatedInput = updatedInput
     .replace(/\s+([,;])/g, "$1")
     .replace(/([,;])\s*([,;])/g, "$1")
     .replace(/\s{2,}/g, " ")
     .replace(/^[,;\s]+|[,;\s]+$/g, "")
     .trim();
-
   return hasReplacedOption ? updatedInput : [updatedInput, label].filter(Boolean).join(", ");
 }
 
 function updateGeneratorSuggestionStates() {
   const result = parseGeneratorInput(elements.generatorInput.value);
   elements.generatorSuggestions.querySelectorAll("[data-option-category]").forEach((button) => {
-    const isSelected = result.matches[button.dataset.optionCategory].includes(button.dataset.optionValue);
-    button.setAttribute("aria-pressed", String(isSelected));
+    button.setAttribute("aria-pressed", String(result.matches[button.dataset.optionCategory].includes(button.dataset.optionValue)));
   });
+}
+
+function getLocalDateString() {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+function getDatabaseExercise(id) {
+  return EXERCISE_BY_ID.get(id);
+}
+
+function exerciseMatchesLocation(exercise, location) {
+  return exercise.locations.includes("beide") || exercise.locations.includes(location);
+}
+
+// Progressiegroepen leveren precies één variant. Pull-up en dip blijven voor
+// beginner/gemiddeld geassisteerd; de overige groepen hebben een eigen variant per niveau.
+function resolveProgressionExercise(group, level, variant, location) {
+  const requestedLevel = ["pull-up", "dip"].includes(group) && level !== "gevorderd" ? "beginner" : level;
+  let candidates = EXERCISE_DATABASE.filter((exercise) => exercise.progressionGroup === group && exercise.progressionLevel === requestedLevel);
+  const locationCandidates = candidates.filter((exercise) => exerciseMatchesLocation(exercise, location));
+  if (locationCandidates.length) candidates = locationCandidates;
+  if (!candidates.length) throw new Error(`Geen progressievariant gevonden voor ${group}.`);
+  return candidates[variant % candidates.length];
+}
+
+function rotateBlueprint(blueprint, variant) {
+  if (!variant || blueprint.length <= 2) return blueprint;
+  const anchors = blueprint.slice(0, 2);
+  const alternatives = blueprint.slice(2);
+  const offset = variant % alternatives.length;
+  return [...anchors, ...alternatives.slice(offset), ...alternatives.slice(0, offset)];
+}
+
+// Trainingstype en locatie kiezen de lijst met database-id's. Tokens met @ worden
+// via het gekozen niveau naar één veilige progressievariant vertaald.
+function selectDatabaseExercises(preferences, variant = 0) {
+  return rotateBlueprint(GENERATOR_BLUEPRINTS[preferences.trainingType][preferences.location], variant)
+    .map((entry) => entry.startsWith("@")
+      ? resolveProgressionExercise(entry.slice(1), preferences.level, variant, preferences.location)
+      : getDatabaseExercise(entry))
+    .filter((exercise, index, list) => exercise && list.findIndex((candidate) => candidate.id === exercise.id) === index);
+}
+
+function findPromptWeightOverrides(input, exercises) {
+  const normalizedInput = normalizeExerciseText(input);
+  const positions = exercises
+    .map((exercise) => ({ exercise, index: normalizedInput.indexOf(normalizeExerciseText(exercise.name)) }))
+    .filter((mention) => mention.index >= 0)
+    .sort((a, b) => a.index - b.index);
+  const overrides = new Map();
+  positions.forEach((mention, index) => {
+    const segment = normalizedInput.slice(mention.index, positions[index + 1]?.index ?? normalizedInput.length);
+    const weightMatch = segment.match(/\b(\d+(?:[.,]\d+)?)\s*(?:kg|kilo(?:gram)?|kilos|kilogrammen|plaat|platen|plate|plates)\b/);
+    if (weightMatch) overrides.set(mention.exercise.id, Number(weightMatch[1].replace(",", ".")));
+  });
+  return overrides;
+}
+
+function createPlanExerciseFromDatabase(exercise, overrides = {}) {
+  const trackingType = exercise.trackingType;
+  return {
+    exerciseId: exercise.id,
+    name: exercise.name,
+    trackingType,
+    plannedSets: overrides.plannedSets ?? exercise.defaultSets,
+    plannedRepetitions: trackingType === "strength" ? (overrides.plannedRepetitions ?? exercise.defaultRepetitions) : 0,
+    plannedWeight: trackingType === "strength" ? (overrides.plannedWeight ?? exercise.defaultWeight) : 0,
+    plannedMinutes: trackingType === "cardio" ? (overrides.plannedMinutes ?? exercise.defaultMinutes) : 0
+  };
+}
+
+// Tijd bepaalt het aantal oefeningen en een setcorrectie; niveau bepaalt daarnaast
+// sets en herhalingen. Cardio verdeelt de beschikbare minuten over oefeningen en intervallen.
+function createGeneratedPlan(preferences, variant = 0, generatorInput = "") {
+  const selectedExercises = selectDatabaseExercises(preferences, variant);
+  const typeLabel = generatorOptionLabel("trainingType", preferences.trainingType);
+  const locationLabel = generatorOptionLabel("location", preferences.location).toLowerCase();
+  const levelLabel = generatorOptionLabel("level", preferences.level).toLowerCase();
+  let exercises;
+
+  if (preferences.trainingType === "cardio") {
+    const exerciseCount = Math.min(selectedExercises.length, CARDIO_TIME_SETTINGS[preferences.duration].exerciseCount);
+    const intervalCount = preferences.level === "gevorderd" && Number(preferences.duration) >= 30
+      ? 2
+      : preferences.level === "gemiddeld" && Number(preferences.duration) >= 45 ? 2 : 1;
+    const minutesPerInterval = Math.max(5, Math.floor(Number(preferences.duration) / (exerciseCount * intervalCount)));
+    exercises = selectedExercises.slice(0, exerciseCount).map((exercise) => createPlanExerciseFromDatabase(exercise, {
+      plannedSets: intervalCount,
+      plannedMinutes: minutesPerInterval
+    }));
+  } else {
+    const timeSettings = GENERATOR_TIME_SETTINGS[preferences.duration];
+    const levelSettings = GENERATOR_LEVEL_SETTINGS[preferences.level];
+    const exerciseCount = Math.min(selectedExercises.length, timeSettings.exerciseCount + levelSettings.exerciseModifier);
+    const plannedSets = Math.max(2, Math.min(4, levelSettings.baseSets + timeSettings.setModifier));
+    const weightOverrides = findPromptWeightOverrides(generatorInput, selectedExercises);
+    exercises = selectedExercises.slice(0, exerciseCount).map((exercise) => createPlanExerciseFromDatabase(exercise, {
+      plannedSets,
+      plannedRepetitions: Math.max(5, Math.min(20, exercise.defaultRepetitions + levelSettings.repetitionModifier)),
+      plannedWeight: weightOverrides.get(exercise.id) ?? exercise.defaultWeight
+    }));
+  }
+
+  return {
+    workoutName: `${typeLabel} ${locationLabel} - ${levelLabel} (${preferences.duration} min)`,
+    date: getLocalDateString(),
+    exercises
+  };
 }
 
 function clearProposalPreview() {
   generatedPlan = null;
   generatedPreferences = null;
   proposalVariant = 0;
+  proposalSearchState = null;
   elements.proposalPreview.classList.add("hidden");
   elements.proposalExerciseList.innerHTML = "";
+  elements.addExerciseSearch.innerHTML = "";
+  elements.addExerciseSearch.classList.add("hidden");
 }
 
-function getLocalDateString() {
-  const now = new Date();
-  const localTime = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
-  return localTime.toISOString().slice(0, 10);
+function trackingTypeLabel(trackingType) {
+  return trackingType === "cardio" ? "Cardio" : "Kracht";
 }
 
-// Het trainingstype en de locatie kiezen samen het gecontroleerde sjabloon.
-// Bij een alternatief voorstel blijven de twee basisoefeningen staan en roteert de rest.
-function selectTemplateExercises(preferences, variant) {
-  const template = WORKOUT_TEMPLATES[preferences.trainingType][preferences.location];
-  if (!variant) return template;
-
-  const anchors = template.slice(0, 2);
-  const alternatives = template.slice(2);
-  const offset = variant % alternatives.length;
-  return [...anchors, ...alternatives.slice(offset), ...alternatives.slice(0, offset)];
+function scoreSearchResult(exercise, query, preferences) {
+  const normalizedName = normalizeExerciseText(exercise.name);
+  const normalizedQuery = normalizeExerciseSearchText(query);
+  const preferredCategory = preferences.trainingType === "benen" ? "legs" : preferences.trainingType;
+  let score = 0;
+  if (!normalizedQuery) score += 1;
+  if (normalizedName === normalizedQuery) score += 200;
+  else if (normalizedName.startsWith(normalizedQuery)) score += 120;
+  else if (normalizedName.includes(normalizedQuery)) score += 80;
+  if (exerciseMatchesLocation(exercise, preferences.location)) score += 35;
+  if (exercise.category === preferredCategory || (preferredCategory === "fullBody" && ["fullBody", "push", "pull", "legs", "core"].includes(exercise.category))) score += 25;
+  if (exercise.trackingType === (preferences.trainingType === "cardio" ? "cardio" : "strength")) score += 20;
+  if (LEVEL_RANK[exercise.minimumLevel] <= LEVEL_RANK[preferences.level]) score += 15;
+  if (exercise.minimumLevel === preferences.level) score += 5;
+  return score;
 }
 
-// De tijd bepaalt het basisaantal oefeningen en een setcorrectie. Het niveau voegt
-// oefeningen, sets en herhalingen toe; vier sets is de bovengrens om het schema haalbaar te houden.
-// Expliciet genoemde oefeningen worden naar voren gehaald en krijgen alleen hun eigen herkende belasting.
-function createGeneratedPlan(preferences, variant = 0, generatorInput = "") {
-  const timeSettings = GENERATOR_TIME_SETTINGS[preferences.duration];
-  const levelSettings = GENERATOR_LEVEL_SETTINGS[preferences.level];
-  const templateExercises = selectTemplateExercises(preferences, variant);
-  const exerciseCount = Math.min(templateExercises.length, timeSettings.exerciseCount + levelSettings.exerciseModifier);
-  const plannedSets = Math.max(2, Math.min(4, levelSettings.baseSets + timeSettings.setModifier));
-  const typeLabel = generatorOptionLabel("trainingType", preferences.trainingType);
-  const locationLabel = generatorOptionLabel("location", preferences.location).toLowerCase();
-  const levelLabel = generatorOptionLabel("level", preferences.level).toLowerCase();
-  const mentions = findExerciseMentions(generatorInput, WORKOUT_TEMPLATES[preferences.trainingType][preferences.location]);
-  const mentionByName = new Map(mentions.map((mention) => [mention.exercise.name, mention]));
-  const mentionedExercises = mentions.map((mention) => mention.exercise);
-  const orderedExercises = [
-    ...mentionedExercises,
-    ...templateExercises.filter((exercise) => !mentionByName.has(exercise.name))
-  ];
+// Zoeken gebeurt over de volledige centrale database. Naamtreffers komen eerst;
+// daarna wegen passende locatie, trainingscategorie en niveau mee in de volgorde.
+function searchExerciseDatabase(query, preferences = generatedPreferences) {
+  const normalizedQuery = normalizeExerciseSearchText(query);
+  return EXERCISE_DATABASE
+    .filter((exercise) => !normalizedQuery || normalizeExerciseText(exercise.name).includes(normalizedQuery))
+    .map((exercise) => ({ exercise, score: scoreSearchResult(exercise, normalizedQuery, preferences) }))
+    .sort((a, b) => b.score - a.score || a.exercise.name.localeCompare(b.exercise.name, "nl"))
+    .slice(0, 12)
+    .map(({ exercise }) => exercise);
+}
 
-  return {
-    workoutName: `${typeLabel} ${locationLabel} - ${levelLabel} (${preferences.duration} min)`,
-    date: getLocalDateString(),
-    exercises: orderedExercises.slice(0, exerciseCount).map((exercise) => {
-      const defaultLoadType = resolveLoadType({ name: exercise.name, plannedWeight: exercise.weight });
-      const loadOverride = mentionByName.get(exercise.name)?.loadOverride;
-      return {
-        name: exercise.name,
-        plannedSets,
-        plannedRepetitions: Math.max(5, Math.min(20, exercise.repetitions + levelSettings.repetitionModifier)),
-        plannedWeight: loadOverride?.plannedWeight ?? exercise.weight,
-        loadType: loadOverride?.loadType || defaultLoadType
-      };
-    })
-  };
+function exerciseSearchMarkup(mode, exerciseIndex, query = "") {
+  const results = searchExerciseDatabase(query);
+  return `
+    <div class="exercise-search-panel" data-search-mode="${mode}" ${exerciseIndex === null ? "" : `data-exercise-index="${exerciseIndex}"`}>
+      <div class="exercise-search-heading">
+        <strong>${mode === "add" ? "Oefening toevoegen" : "Oefening vervangen"}</strong>
+        <button type="button" class="icon-button" data-proposal-action="close-search" aria-label="Zoeken sluiten">&times;</button>
+      </div>
+      <label>Zoek op naam
+        <input type="search" data-exercise-search value="${escapeHtml(query)}" placeholder="Bijvoorbeeld: pull-up of loopband" autocomplete="off">
+      </label>
+      <div class="exercise-search-results" role="listbox">
+        ${exerciseSearchResultsMarkup(results, mode, exerciseIndex)}
+      </div>
+    </div>
+  `;
+}
+
+function exerciseSearchResultsMarkup(results, mode, exerciseIndex) {
+  if (!results.length) return '<p class="muted search-empty">Geen oefeningen gevonden. Probeer een deel van de naam.</p>';
+  return results.map((exercise) => `
+    <button type="button" class="exercise-search-result" role="option" data-proposal-action="select-exercise" data-search-mode="${mode}" data-exercise-id="${exercise.id}" ${exerciseIndex === null ? "" : `data-exercise-index="${exerciseIndex}"`}>
+      <span>${escapeHtml(exercise.name)}</span>
+      <small>${trackingTypeLabel(exercise.trackingType)} · ${escapeHtml(generatorOptionLabel("level", exercise.minimumLevel))} · ${escapeHtml(exercise.locations.map((location) => location === "beide" ? "Thuis & sportschool" : generatorOptionLabel("location", location)).join(", "))}</small>
+    </button>
+  `).join("");
+}
+
+function proposalExerciseMarkup(exercise, exerciseIndex) {
+  const trackingType = resolveTrackingType(exercise);
+  const searchIsOpen = proposalSearchState?.mode === "replace" && proposalSearchState.exerciseIndex === exerciseIndex;
+  return `
+    <li class="proposal-exercise-card" data-proposal-index="${exerciseIndex}">
+      <div class="proposal-card-heading">
+        <span class="tracking-badge ${trackingType}">${trackingTypeLabel(trackingType)}</span>
+        <div class="proposal-card-actions">
+          <button type="button" class="button secondary compact-button" data-proposal-action="replace" data-exercise-index="${exerciseIndex}">Vervang oefening</button>
+          <button type="button" class="button danger ghost compact-button" data-proposal-action="delete" data-exercise-index="${exerciseIndex}">Verwijder oefening</button>
+        </div>
+      </div>
+      <div class="proposal-fields">
+        <label class="field-wide">Naam
+          <input type="text" data-proposal-field="name" data-exercise-index="${exerciseIndex}" value="${escapeHtml(exercise.name)}">
+        </label>
+        <label>Trainingstype
+          <select data-proposal-field="trackingType" data-exercise-index="${exerciseIndex}">
+            <option value="strength" ${trackingType === "strength" ? "selected" : ""}>Kracht</option>
+            <option value="cardio" ${trackingType === "cardio" ? "selected" : ""}>Cardio</option>
+          </select>
+        </label>
+        <label>${trackingType === "cardio" ? "Intervallen" : "Sets"}
+          <input type="number" min="1" max="20" step="1" inputmode="numeric" data-proposal-field="plannedSets" data-exercise-index="${exerciseIndex}" value="${exercise.plannedSets}">
+        </label>
+        ${trackingType === "strength" ? `
+          <label>Herhalingen
+            <input type="number" min="0" step="1" inputmode="numeric" data-proposal-field="plannedRepetitions" data-exercise-index="${exerciseIndex}" value="${exercise.plannedRepetitions}">
+          </label>
+          <label>Gepland gewicht (Kg)
+            <input type="number" min="0" step="0.5" inputmode="decimal" data-proposal-field="plannedWeight" data-exercise-index="${exerciseIndex}" value="${exercise.plannedWeight}">
+          </label>
+        ` : `
+          <label>Minuten per interval
+            <input type="number" min="0" step="1" inputmode="numeric" data-proposal-field="plannedMinutes" data-exercise-index="${exerciseIndex}" value="${exercise.plannedMinutes}">
+          </label>
+        `}
+      </div>
+      ${searchIsOpen ? exerciseSearchMarkup("replace", exerciseIndex, proposalSearchState.query) : ""}
+    </li>
+  `;
 }
 
 function renderProposal() {
@@ -598,24 +677,11 @@ function renderProposal() {
     `${generatedPreferences.duration} minuten`,
     `${generatedPlan.exercises.length} oefeningen`
   ].join(" · ");
+  elements.proposalExerciseList.innerHTML = generatedPlan.exercises.map(proposalExerciseMarkup).join("");
 
-  elements.proposalExerciseList.innerHTML = generatedPlan.exercises.map((exercise, exerciseIndex) => {
-    const loadType = resolveLoadType(exercise);
-    const showLoadEditor = loadType !== "bodyweight";
-    return `
-      <li class="proposal-exercise">
-        <strong>${escapeHtml(exercise.name)}</strong>
-        <span data-proposal-summary-index="${exerciseIndex}">${escapeHtml(formatPlannedExercise(exercise))}</span>
-        ${showLoadEditor ? `
-          <label class="proposal-load-editor">
-            ${escapeHtml(loadInputLabel(loadType))}
-            <input type="number" min="0" step="${loadType === "plates" ? "1" : "0.5"}" inputmode="${loadType === "plates" ? "numeric" : "decimal"}" data-proposal-weight-index="${exerciseIndex}" value="${exercise.plannedWeight}">
-          </label>
-        ` : ""}
-      </li>
-    `;
-  }).join("");
-
+  const addSearchIsOpen = proposalSearchState?.mode === "add";
+  elements.addExerciseSearch.classList.toggle("hidden", !addSearchIsOpen);
+  elements.addExerciseSearch.innerHTML = addSearchIsOpen ? exerciseSearchMarkup("add", null, proposalSearchState.query) : "";
   elements.proposalPreview.classList.remove("hidden");
 }
 
@@ -632,17 +698,56 @@ function generateProposalFromInput(useNextVariant = false) {
   proposalVariant = useNextVariant ? proposalVariant + 1 : 0;
   generatedPreferences = result.preferences;
   generatedPlan = createGeneratedPlan(generatedPreferences, proposalVariant, elements.generatorInput.value);
+  proposalSearchState = null;
 
   try {
     validatePlan(generatedPlan);
     renderProposal();
     elements.generatorInput.removeAttribute("aria-invalid");
-    showMessage(elements.generatorMessage, "Voorstel klaar. Bekijk de oefeningen voordat je de training gebruikt.", "success");
+    showMessage(elements.generatorMessage, "Voorstel klaar. Je kunt iedere oefening aanpassen, vervangen, toevoegen of verwijderen.", "success");
     elements.proposalPreview.focus();
   } catch (error) {
     clearProposalPreview();
     showMessage(elements.generatorMessage, `Voorstel maken mislukt: ${error.message}`, "error");
   }
+}
+
+function updateProposalField(input) {
+  if (!generatedPlan) return;
+  const exercise = generatedPlan.exercises[Number(input.dataset.exerciseIndex)];
+  if (!exercise) return;
+  const field = input.dataset.proposalField;
+
+  if (field === "name") {
+    exercise.name = input.value;
+    return;
+  }
+  if (field === "trackingType") {
+    exercise.trackingType = input.value;
+    if (input.value === "cardio") {
+      exercise.plannedRepetitions = 0;
+      exercise.plannedWeight = 0;
+      exercise.plannedMinutes = Math.max(0, numberOrZero(exercise.plannedMinutes) || 15);
+    } else {
+      exercise.plannedRepetitions = Math.max(0, numberOrZero(exercise.plannedRepetitions) || 10);
+      exercise.plannedWeight = Math.max(0, numberOrZero(exercise.plannedWeight));
+      exercise.plannedMinutes = 0;
+    }
+    renderProposal();
+    return;
+  }
+  exercise[field] = Math.max(0, numberOrZero(input.value));
+}
+
+function selectProposalExercise(exerciseId, mode, exerciseIndex) {
+  const databaseExercise = getDatabaseExercise(exerciseId);
+  if (!databaseExercise || !generatedPlan) return;
+  const planExercise = createPlanExerciseFromDatabase(databaseExercise);
+  if (mode === "replace") generatedPlan.exercises[exerciseIndex] = planExercise;
+  else generatedPlan.exercises.push(planExercise);
+  proposalSearchState = null;
+  renderProposal();
+  showMessage(elements.generatorMessage, mode === "replace" ? "Oefening vervangen. Controleer de standaardwaarden." : "Oefening toegevoegd. Controleer de standaardwaarden.", "success");
 }
 
 function switchView(viewId) {
@@ -659,61 +764,71 @@ function validatePlan(plan) {
   plan.exercises.forEach((exercise, index) => {
     if (!exercise || typeof exercise !== "object") throw new Error(`Oefening ${index + 1} is geen geldig object.`);
     if (!String(exercise.name || "").trim()) throw new Error(`Oefening ${index + 1} heeft geen naam.`);
+    if (exercise.trackingType !== undefined && !TRACKING_TYPES.has(String(exercise.trackingType).trim())) {
+      throw new Error(`trackingType van ${exercise.name} moet strength of cardio zijn.`);
+    }
     if (!Number.isInteger(Number(exercise.plannedSets)) || Number(exercise.plannedSets) < 1 || Number(exercise.plannedSets) > 20) {
       throw new Error(`plannedSets van ${exercise.name} moet tussen 1 en 20 zijn.`);
     }
-    if (!Number.isFinite(Number(exercise.plannedRepetitions)) || Number(exercise.plannedRepetitions) < 0) {
-      throw new Error(`plannedRepetitions van ${exercise.name} moet een getal van 0 of hoger zijn.`);
-    }
-    if (!Number.isFinite(Number(exercise.plannedWeight)) || Number(exercise.plannedWeight) < 0) {
-      throw new Error(`plannedWeight van ${exercise.name} moet een getal van 0 of hoger zijn.`);
-    }
-    if (exercise.loadType !== undefined && !SUPPORTED_LOAD_TYPES.has(String(exercise.loadType).trim())) {
-      throw new Error(`loadType van ${exercise.name} moet weight, assistance, plates of bodyweight zijn.`);
-    }
-    const loadType = resolveLoadType(exercise);
-    if (loadType === "plates" && !Number.isInteger(Number(exercise.plannedWeight))) {
-      throw new Error(`plannedWeight van ${exercise.name} moet bij plates een geheel aantal zijn.`);
-    }
-    if (loadType === "bodyweight" && Number(exercise.plannedWeight) !== 0) {
-      throw new Error(`plannedWeight van ${exercise.name} moet bij bodyweight 0 zijn.`);
+
+    if (resolveTrackingType(exercise) === "cardio") {
+      if (!Number.isFinite(Number(exercise.plannedMinutes)) || Number(exercise.plannedMinutes) < 0) {
+        throw new Error(`plannedMinutes van ${exercise.name} moet een getal van 0 of hoger zijn.`);
+      }
+    } else {
+      if (!Number.isFinite(Number(exercise.plannedRepetitions)) || Number(exercise.plannedRepetitions) < 0) {
+        throw new Error(`plannedRepetitions van ${exercise.name} moet een getal van 0 of hoger zijn.`);
+      }
+      if (!Number.isFinite(Number(exercise.plannedWeight)) || Number(exercise.plannedWeight) < 0) {
+        throw new Error(`plannedWeight van ${exercise.name} moet een getal van 0 of hoger zijn.`);
+      }
     }
   });
 }
 
+function findExerciseByName(name) {
+  const normalizedName = normalizeExerciseText(name);
+  return EXERCISE_DATABASE.find((exercise) => normalizeExerciseText(exercise.name) === normalizedName);
+}
+
 function createWorkoutFromPlan(plan) {
   return {
-    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+    id: globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : String(Date.now()),
     workoutName: String(plan.workoutName).trim(),
-    date: plan.date || new Date().toISOString().slice(0, 10),
+    date: plan.date || getLocalDateString(),
     startedAt: new Date().toISOString(),
     finishedAt: null,
     notes: "",
-    exercises: plan.exercises.map((exercise) => ({
-      name: String(exercise.name).trim(),
-      plannedSets: Number(exercise.plannedSets),
-      plannedRepetitions: numberOrZero(exercise.plannedRepetitions),
-      plannedWeight: numberOrZero(exercise.plannedWeight),
-      loadType: resolveLoadType(exercise),
-      difficulty: "normal",
-      notes: "",
-      completedSets: Array.from({ length: Number(exercise.plannedSets) }, () => ({
-        repetitions: numberOrZero(exercise.plannedRepetitions),
-        weight: numberOrZero(exercise.plannedWeight),
-        completed: false
-      }))
-    }))
+    exercises: plan.exercises.map((exercise) => {
+      const trackingType = resolveTrackingType(exercise);
+      const plannedSets = Number(exercise.plannedSets);
+      const plannedRepetitions = trackingType === "strength" ? numberOrZero(exercise.plannedRepetitions) : 0;
+      const plannedWeight = trackingType === "strength" ? numberOrZero(exercise.plannedWeight) : 0;
+      const plannedMinutes = trackingType === "cardio" ? numberOrZero(exercise.plannedMinutes) : 0;
+      const databaseExercise = getDatabaseExercise(exercise.exerciseId) || findExerciseByName(exercise.name);
+      return {
+        ...(databaseExercise ? { exerciseId: databaseExercise.id } : {}),
+        name: String(exercise.name).trim(),
+        trackingType,
+        plannedSets,
+        plannedRepetitions,
+        plannedWeight,
+        plannedMinutes,
+        difficulty: "normal",
+        notes: "",
+        completedSets: Array.from({ length: plannedSets }, () => trackingType === "cardio"
+          ? { minutes: plannedMinutes, completed: false }
+          : { weight: plannedWeight, repetitions: plannedRepetitions, completed: false })
+      };
+    })
   };
 }
 
-// Zowel JSON-import als het lokale voorstel gebruiken exact deze laadroute.
-// Zo wordt een plan één keer gevalideerd, omgezet, opgeslagen, gerenderd en actief geopend.
+// Zowel import als het bewerkte voorstel lopen door dezelfde route: valideren,
+// omzetten, bevestigen bij vervanging, opslaan, renderen en de trainingsweergave openen.
 function loadPlanAsActiveWorkout(plan) {
   validatePlan(plan);
-
-  if (state.currentWorkout && !confirm("Er is al een actieve training. Wil je deze vervangen?")) {
-    return false;
-  }
+  if (state.currentWorkout && !confirm("Er is al een actieve training. Wil je deze vervangen?")) return false;
 
   const previousWorkout = state.currentWorkout;
   state.currentWorkout = createWorkoutFromPlan(plan);
@@ -731,18 +846,82 @@ function loadPlanAsActiveWorkout(plan) {
   return true;
 }
 
-function numberOrZero(value) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
+function formatNumber(value) {
+  return Number(numberOrZero(value).toFixed(2)).toString();
 }
 
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+function plural(value, singular, pluralValue) {
+  return Number(value) === 1 ? singular : pluralValue;
+}
+
+function formatPlannedExercise(exercise) {
+  if (resolveTrackingType(exercise) === "cardio") {
+    return `${exercise.plannedSets} ${plural(exercise.plannedSets, "interval", "intervallen")} × ${formatNumber(exercise.plannedMinutes)} minuten`;
+  }
+  return `${exercise.plannedSets} ${plural(exercise.plannedSets, "set", "sets")} × ${formatNumber(exercise.plannedRepetitions)} herhalingen @ ${formatNumber(exercise.plannedWeight)} kg`;
+}
+
+function extraRowIsModified(exercise, setIndex) {
+  const set = exercise.completedSets[setIndex];
+  if (!set || set.completed) return Boolean(set?.completed);
+  const previous = exercise.completedSets[setIndex - 1];
+  if (resolveTrackingType(exercise) === "cardio") {
+    return numberOrZero(set.minutes) !== numberOrZero(previous?.minutes ?? exercise.plannedMinutes);
+  }
+  return numberOrZero(set.weight) !== numberOrZero(previous?.weight ?? exercise.plannedWeight)
+    || numberOrZero(set.repetitions) !== numberOrZero(previous?.repetitions ?? exercise.plannedRepetitions);
+}
+
+function addExtraRow(exercise) {
+  const previous = exercise.completedSets.at(-1);
+  if (resolveTrackingType(exercise) === "cardio") {
+    exercise.completedSets.push({ minutes: numberOrZero(previous?.minutes ?? exercise.plannedMinutes), completed: false });
+  } else {
+    exercise.completedSets.push({
+      weight: numberOrZero(previous?.weight ?? exercise.plannedWeight),
+      repetitions: numberOrZero(previous?.repetitions ?? exercise.plannedRepetitions),
+      completed: false
+    });
+  }
+}
+
+function extraRowLabel(trackingType, setIndex, plannedSets) {
+  if (setIndex < plannedSets) return String(setIndex + 1);
+  const extraNumber = setIndex - plannedSets + 1;
+  return `${setIndex + 1}<span class="extra-row-label">Extra ${trackingType === "cardio" ? "interval" : "set"}${extraNumber > 1 ? ` ${extraNumber}` : ""}</span>`;
+}
+
+function strengthRowsMarkup(exercise) {
+  return exercise.completedSets.map((set, setIndex) => {
+    const isExtra = setIndex >= Number(exercise.plannedSets);
+    return `
+      <tr class="${isExtra ? "extra-row" : ""}">
+        <td class="set-number">
+          ${extraRowLabel("strength", setIndex, Number(exercise.plannedSets))}
+          ${isExtra ? `<button type="button" class="remove-extra-button" data-row-action="remove-extra" data-set-index="${setIndex}" aria-label="Extra set verwijderen">Verwijder</button>` : ""}
+        </td>
+        <td><input type="number" min="0" step="0.5" inputmode="decimal" data-field="weight" data-set-index="${setIndex}" value="${formatNumber(set.weight)}" aria-label="Kg voor set ${setIndex + 1}"></td>
+        <td><input type="number" min="0" step="1" inputmode="numeric" data-field="repetitions" data-set-index="${setIndex}" value="${formatNumber(set.repetitions)}" aria-label="Herhalingen voor set ${setIndex + 1}"></td>
+        <td><input type="checkbox" data-field="completed" data-set-index="${setIndex}" ${set.completed ? "checked" : ""} aria-label="Set ${setIndex + 1} afgerond"></td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function cardioRowsMarkup(exercise) {
+  return exercise.completedSets.map((set, setIndex) => {
+    const isExtra = setIndex >= Number(exercise.plannedSets);
+    return `
+      <tr class="${isExtra ? "extra-row" : ""}">
+        <td class="set-number">
+          ${extraRowLabel("cardio", setIndex, Number(exercise.plannedSets))}
+          ${isExtra ? `<button type="button" class="remove-extra-button" data-row-action="remove-extra" data-set-index="${setIndex}" aria-label="Extra interval verwijderen">Verwijder</button>` : ""}
+        </td>
+        <td><input type="number" min="0" step="1" inputmode="numeric" data-field="minutes" data-set-index="${setIndex}" value="${formatNumber(set.minutes)}" aria-label="Minuten voor interval ${setIndex + 1}"></td>
+        <td><input type="checkbox" data-field="completed" data-set-index="${setIndex}" ${set.completed ? "checked" : ""} aria-label="Interval ${setIndex + 1} afgerond"></td>
+      </tr>
+    `;
+  }).join("");
 }
 
 function renderWorkout() {
@@ -750,7 +929,6 @@ function renderWorkout() {
   const hasWorkout = Boolean(workout);
   elements.emptyWorkout.classList.toggle("hidden", hasWorkout);
   elements.workoutContent.classList.toggle("hidden", !hasWorkout);
-
   if (!hasWorkout) return;
 
   elements.workoutTitle.textContent = workout.workoutName;
@@ -758,39 +936,31 @@ function renderWorkout() {
   elements.workoutNotes.value = workout.notes || "";
 
   elements.exerciseList.innerHTML = workout.exercises.map((exercise, exerciseIndex) => {
-    const allCompleted = exercise.completedSets.every((set) => set.completed);
-    const loadType = resolveLoadType(exercise);
-    const showLoadInput = loadType !== "bodyweight";
-    const inputStep = loadType === "plates" ? "1" : "0.5";
-    const inputMode = loadType === "plates" ? "numeric" : "decimal";
-
+    const trackingType = resolveTrackingType(exercise);
+    const allCompleted = exercise.completedSets.length > 0 && exercise.completedSets.every((set) => set.completed);
     return `
       <article class="exercise-card ${allCompleted ? "completed" : ""}" data-exercise-index="${exerciseIndex}">
         <header class="exercise-header">
-          <h3>${escapeHtml(exercise.name)}</h3>
+          <div>
+            <span class="tracking-badge ${trackingType}">${trackingTypeLabel(trackingType)}</span>
+            <h3>${escapeHtml(exercise.name)}</h3>
+          </div>
           <p class="muted">Gepland: ${escapeHtml(formatPlannedExercise(exercise))}</p>
-          ${loadType === "assistance" ? '<p class="load-hint">Meer hulpgewicht = meer ondersteuning</p>' : ""}
         </header>
         <div class="exercise-body">
-          <table class="set-table">
-            <thead>
-              <tr><th>Set</th><th>${escapeHtml(loadColumnLabel(loadType))}</th><th>Herhalingen</th><th>Klaar</th></tr>
-            </thead>
-            <tbody>
-              ${exercise.completedSets.map((set, setIndex) => `
-                <tr>
-                  <td class="set-number">${setIndex + 1}</td>
-                  <td>${showLoadInput
-                    ? `<input type="number" min="0" step="${inputStep}" inputmode="${inputMode}" data-field="weight" data-set-index="${setIndex}" value="${set.weight}" aria-label="${escapeHtml(loadColumnLabel(loadType))} voor set ${setIndex + 1}">`
-                    : '<span class="bodyweight-value">Lichaamsgewicht</span>'}
-                  </td>
-                  <td><input type="number" min="0" step="1" inputmode="numeric" data-field="repetitions" data-set-index="${setIndex}" value="${set.repetitions}"></td>
-                  <td><input type="checkbox" data-field="completed" data-set-index="${setIndex}" ${set.completed ? "checked" : ""} aria-label="Set ${setIndex + 1} afgerond"></td>
-                </tr>
-              `).join("")}
-            </tbody>
-          </table>
-
+          ${trackingType === "cardio" ? `
+            <table class="set-table cardio-table">
+              <thead><tr><th>Interval</th><th>Minuten</th><th>Klaar</th></tr></thead>
+              <tbody>${cardioRowsMarkup(exercise)}</tbody>
+            </table>
+            <button type="button" class="button secondary add-row-button" data-exercise-action="add-row">+ Interval toevoegen</button>
+          ` : `
+            <table class="set-table strength-table">
+              <thead><tr><th>Set</th><th>Kg</th><th>Herhalingen</th><th>Klaar</th></tr></thead>
+              <tbody>${strengthRowsMarkup(exercise)}</tbody>
+            </table>
+            <button type="button" class="button secondary add-row-button" data-exercise-action="add-row">+ Set toevoegen</button>
+          `}
           <div class="exercise-options">
             <label>Moeilijkheid
               <select data-exercise-field="difficulty">
@@ -815,13 +985,12 @@ function renderHistory() {
     elements.historyList.innerHTML = '<p class="muted">Nog geen afgeronde trainingen.</p>';
     return;
   }
-
   elements.historyList.innerHTML = state.history.map((workout, index) => {
-    const setCount = workout.exercises.reduce((total, exercise) => total + exercise.completedSets.filter((set) => set.completed).length, 0);
+    const completedCount = workout.exercises.reduce((total, exercise) => total + exercise.completedSets.filter((set) => set.completed).length, 0);
     return `
       <article class="history-item">
         <h3>${escapeHtml(workout.workoutName)}</h3>
-        <p class="history-meta">${escapeHtml(formatDate(workout.date))} · ${setCount} afgeronde sets · ${workout.exercises.length} oefeningen</p>
+        <p class="history-meta">${escapeHtml(formatDate(workout.date))} · ${completedCount} afgeronde sets/intervallen · ${workout.exercises.length} oefeningen</p>
         <div class="history-actions">
           <button class="button secondary" data-history-action="copy" data-history-index="${index}">Kopieer voor AI</button>
           <button class="button secondary" data-history-action="download" data-history-index="${index}">JSON</button>
@@ -838,27 +1007,26 @@ function formatDate(dateString) {
 }
 
 function workoutToAiText(workout) {
-  const lines = [
-    `Training: ${workout.workoutName}`,
-    `Datum: ${workout.date}`,
-    ""
-  ];
-
+  const lines = [`Training: ${workout.workoutName}`, `Datum: ${workout.date}`, ""];
   workout.exercises.forEach((exercise) => {
-    const loadType = resolveLoadType(exercise);
+    const trackingType = resolveTrackingType(exercise);
     lines.push(exercise.name);
     lines.push(`Gepland: ${formatPlannedExercise(exercise)}`);
+    lines.push(`Werkelijk uitgevoerd: ${exercise.completedSets.length} ${trackingType === "cardio" ? plural(exercise.completedSets.length, "interval", "intervallen") : plural(exercise.completedSets.length, "set", "sets")}`);
     lines.push("Uitgevoerd:");
     exercise.completedSets.forEach((set, index) => {
-      lines.push(`- Set ${index + 1}: ${set.repetitions} herhalingen met ${formatLoadValue(loadType, set.weight)} (${set.completed ? "afgerond" : "niet afgerond"})`);
+      const isExtra = index >= Number(exercise.plannedSets);
+      const label = isExtra ? (trackingType === "cardio" ? `Extra interval ${index + 1}` : `Extra set ${index + 1}`) : (trackingType === "cardio" ? `Interval ${index + 1}` : `Set ${index + 1}`);
+      const status = set.completed ? "" : " (niet afgerond)";
+      if (trackingType === "cardio") lines.push(`- ${label}: ${formatNumber(set.minutes)} minuten${status}`);
+      else lines.push(`- ${label}: ${formatNumber(set.repetitions)} herhalingen @ ${formatNumber(set.weight)} kg${status}`);
     });
     lines.push(`Moeilijkheid: ${difficultyLabel(exercise.difficulty)}`);
     if (exercise.notes) lines.push(`Notitie: ${exercise.notes}`);
     lines.push("");
   });
-
   if (workout.notes) lines.push(`Algemene notitie: ${workout.notes}`);
-  lines.push("", "Geef feedback op de uitvoering en stel waar passend de volgende belasting of het aantal herhalingen voor.");
+  lines.push("", "Geef feedback op de uitvoering en stel waar passend de volgende belasting, herhalingen of duur voor.");
   return lines.join("\n");
 }
 
@@ -883,7 +1051,6 @@ async function copyText(text, messageElement = null) {
     if (navigator.clipboard && window.isSecureContext) {
       await navigator.clipboard.writeText(text);
     } else {
-      // Terugvaloptie voor lokaal openen via file:// of oudere browsers.
       const temporaryTextArea = document.createElement("textarea");
       temporaryTextArea.value = text;
       temporaryTextArea.style.position = "fixed";
@@ -894,19 +1061,12 @@ async function copyText(text, messageElement = null) {
       temporaryTextArea.remove();
       if (!copied) throw new Error("De browser blokkeerde kopiëren.");
     }
-
-    if (messageElement) {
-      showMessage(messageElement, "Samenvatting gekopieerd. Je kunt deze nu in een AI-chat plakken.", "success");
-    } else {
-      alert("Samenvatting gekopieerd. Je kunt deze nu in een AI-chat plakken.");
-    }
+    if (messageElement) showMessage(messageElement, "Samenvatting gekopieerd. Je kunt deze nu in een AI-chat plakken.", "success");
+    else alert("Samenvatting gekopieerd. Je kunt deze nu in een AI-chat plakken.");
   } catch (error) {
     console.error(error);
-    if (messageElement) {
-      showMessage(messageElement, "Kopiëren lukte niet. Gebruik JSON downloaden als alternatief.", "error");
-    } else {
-      alert("Kopiëren lukte niet. Download de JSON als alternatief.");
-    }
+    if (messageElement) showMessage(messageElement, "Kopiëren lukte niet. Gebruik JSON downloaden als alternatief.", "error");
+    else alert("Kopiëren lukte niet. Download de JSON als alternatief.");
   }
 }
 
@@ -918,7 +1078,7 @@ function safeFilename(value) {
 elements.tabs.forEach((tab) => tab.addEventListener("click", () => switchView(tab.dataset.view)));
 document.querySelectorAll("[data-go]").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.go)));
 
-// Lokaal trainingsvoorstel
+// Generator en suggesties
 elements.generatorInput.addEventListener("input", () => {
   if (generatedPlan) clearProposalPreview();
   elements.generatorInput.removeAttribute("aria-invalid");
@@ -929,59 +1089,86 @@ elements.generatorInput.addEventListener("input", () => {
 elements.generatorSuggestions.addEventListener("click", (event) => {
   const button = event.target.closest("[data-option-category]");
   if (!button) return;
-
-  elements.generatorInput.value = replaceGeneratorOption(
-    elements.generatorInput.value,
-    button.dataset.optionCategory,
-    button.dataset.optionValue
-  );
+  elements.generatorInput.value = replaceGeneratorOption(elements.generatorInput.value, button.dataset.optionCategory, button.dataset.optionValue);
   elements.generatorInput.dispatchEvent(new Event("input", { bubbles: true }));
   elements.generatorInput.focus();
 });
 
-// Het voorstel blijft een gewoon planobject. Een wijziging in dit kleine veld past
-// direct plannedWeight aan, zodat dezelfde waarde later in iedere geplande set terechtkomt.
-elements.proposalExerciseList.addEventListener("input", (event) => {
-  const input = event.target.closest("[data-proposal-weight-index]");
-  if (!input || !generatedPlan) return;
-
-  const exerciseIndex = Number(input.dataset.proposalWeightIndex);
-  const exercise = generatedPlan.exercises[exerciseIndex];
-  if (!exercise) return;
-
-  const loadType = resolveLoadType(exercise);
-  let plannedWeight = Math.max(0, numberOrZero(input.value));
-  if (loadType === "plates") {
-    plannedWeight = Math.round(plannedWeight);
-    if (input.value !== "") input.value = String(plannedWeight);
-  }
-  exercise.plannedWeight = plannedWeight;
-
-  const summary = elements.proposalExerciseList.querySelector(`[data-proposal-summary-index="${exerciseIndex}"]`);
-  if (summary) summary.textContent = formatPlannedExercise(exercise);
-});
-
 document.querySelector("#generateProposalButton").addEventListener("click", () => generateProposalFromInput(false));
 document.querySelector("#regenerateProposalButton").addEventListener("click", () => generateProposalFromInput(true));
+
+elements.addProposalExerciseButton.addEventListener("click", () => {
+  if (!generatedPlan) return;
+  proposalSearchState = { mode: "add", exerciseIndex: null, query: "" };
+  renderProposal();
+  elements.addExerciseSearch.querySelector("[data-exercise-search]")?.focus();
+});
+
+elements.proposalPreview.addEventListener("input", (event) => {
+  const proposalField = event.target.closest("[data-proposal-field]");
+  if (proposalField) {
+    updateProposalField(proposalField);
+    return;
+  }
+  const searchInput = event.target.closest("[data-exercise-search]");
+  if (!searchInput || !proposalSearchState) return;
+  proposalSearchState.query = searchInput.value;
+  const resultsElement = searchInput.closest(".exercise-search-panel").querySelector(".exercise-search-results");
+  resultsElement.innerHTML = exerciseSearchResultsMarkup(
+    searchExerciseDatabase(searchInput.value),
+    proposalSearchState.mode,
+    proposalSearchState.exerciseIndex
+  );
+});
+
+elements.proposalPreview.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-proposal-action]");
+  if (!button || !generatedPlan) return;
+  const action = button.dataset.proposalAction;
+  const exerciseIndex = button.dataset.exerciseIndex === undefined ? null : Number(button.dataset.exerciseIndex);
+
+  if (action === "replace") {
+    proposalSearchState = { mode: "replace", exerciseIndex, query: "" };
+    renderProposal();
+    elements.proposalExerciseList.querySelector(`[data-proposal-index="${exerciseIndex}"] [data-exercise-search]`)?.focus();
+  }
+  if (action === "close-search") {
+    proposalSearchState = null;
+    renderProposal();
+  }
+  if (action === "select-exercise") {
+    selectProposalExercise(button.dataset.exerciseId, button.dataset.searchMode, exerciseIndex);
+  }
+  if (action === "delete") {
+    if (generatedPlan.exercises.length === 1) {
+      showMessage(elements.generatorMessage, "Een training moet minimaal één oefening bevatten.", "error");
+      return;
+    }
+    if (!confirm(`Oefening “${generatedPlan.exercises[exerciseIndex].name}” uit het voorstel verwijderen?`)) return;
+    generatedPlan.exercises.splice(exerciseIndex, 1);
+    proposalSearchState = null;
+    renderProposal();
+    showMessage(elements.generatorMessage, "Oefening verwijderd.", "success");
+  }
+});
 
 document.querySelector("#useProposalButton").addEventListener("click", () => {
   if (!generatedPlan) {
     showMessage(elements.generatorMessage, "Maak eerst een geldig trainingsvoorstel.", "error");
     return;
   }
-
   try {
     if (!loadPlanAsActiveWorkout(generatedPlan)) {
       showMessage(elements.generatorMessage, "Je actieve training is niet vervangen.");
       return;
     }
-    showMessage(elements.workoutMessage, "Trainingsvoorstel geladen en automatisch opgeslagen.", "success");
+    showMessage(elements.workoutMessage, "Het bewerkte trainingsvoorstel is geladen en automatisch opgeslagen.", "success");
   } catch (error) {
     showMessage(elements.generatorMessage, `Training laden mislukt: ${error.message}`, "error");
   }
 });
 
-// Importeren
+// Handmatige JSON-import gebruikt dezelfde validatePlan- en laadroute.
 document.querySelector("#loadExampleButton").addEventListener("click", () => {
   elements.planInput.value = JSON.stringify(examplePlan, null, 2);
   showMessage(elements.importMessage, "Voorbeeld geladen. Klik nu op ‘Plan importeren’.", "success");
@@ -1000,7 +1187,7 @@ document.querySelector("#importButton").addEventListener("click", () => {
   }
 });
 
-// Invoer tijdens de training
+// Actieve training: kracht en cardio delen opslag en status, maar hebben eigen rijvelden.
 elements.exerciseList.addEventListener("input", (event) => {
   if (!state.currentWorkout) return;
   const card = event.target.closest("[data-exercise-index]");
@@ -1011,20 +1198,33 @@ elements.exerciseList.addEventListener("input", (event) => {
     exercise[event.target.dataset.exerciseField] = event.target.value;
   } else if (event.target.dataset.field) {
     const set = exercise.completedSets[Number(event.target.dataset.setIndex)];
-    let value = event.target.type === "checkbox" ? event.target.checked : numberOrZero(event.target.value);
-    if (event.target.dataset.field === "weight" && resolveLoadType(exercise) === "plates") {
-      value = Math.max(0, Math.round(value));
-      event.target.value = String(value);
-    }
-    set[event.target.dataset.field] = value;
+    set[event.target.dataset.field] = event.target.type === "checkbox" ? event.target.checked : Math.max(0, numberOrZero(event.target.value));
   }
-
   saveState();
   if (event.target.type === "checkbox") renderWorkout();
 });
 
-elements.exerciseList.addEventListener("change", (event) => {
-  event.target.dispatchEvent(new Event("input", { bubbles: true }));
+elements.exerciseList.addEventListener("click", (event) => {
+  if (!state.currentWorkout) return;
+  const card = event.target.closest("[data-exercise-index]");
+  if (!card) return;
+  const exercise = state.currentWorkout.exercises[Number(card.dataset.exerciseIndex)];
+  const addButton = event.target.closest("[data-exercise-action='add-row']");
+  if (addButton) {
+    addExtraRow(exercise);
+    saveState();
+    renderWorkout();
+    return;
+  }
+  const removeButton = event.target.closest("[data-row-action='remove-extra']");
+  if (!removeButton) return;
+  const setIndex = Number(removeButton.dataset.setIndex);
+  if (setIndex < Number(exercise.plannedSets)) return;
+  const kind = resolveTrackingType(exercise) === "cardio" ? "interval" : "set";
+  if (extraRowIsModified(exercise, setIndex) && !confirm(`Deze extra ${kind} is aangepast of afgevinkt. Toch verwijderen?`)) return;
+  exercise.completedSets.splice(setIndex, 1);
+  saveState();
+  renderWorkout();
 });
 
 elements.workoutNotes.addEventListener("input", () => {
@@ -1053,13 +1253,10 @@ document.querySelector("#copyTextButton").addEventListener("click", () => {
 
 document.querySelector("#finishWorkoutButton").addEventListener("click", () => {
   if (!state.currentWorkout) return;
-  const completedSets = state.currentWorkout.exercises.reduce((count, exercise) => count + exercise.completedSets.filter((set) => set.completed).length, 0);
-  if (completedSets === 0 && !confirm("Er zijn nog geen sets afgevinkt. Toch afronden?")) return;
-
+  const completedRows = state.currentWorkout.exercises.reduce((count, exercise) => count + exercise.completedSets.filter((set) => set.completed).length, 0);
+  if (completedRows === 0 && !confirm("Er zijn nog geen sets of intervallen afgevinkt. Toch afronden?")) return;
   state.currentWorkout.finishedAt = new Date().toISOString();
-  const finishedWorkout = typeof structuredClone === "function"
-    ? structuredClone(state.currentWorkout)
-    : JSON.parse(JSON.stringify(state.currentWorkout));
+  const finishedWorkout = typeof structuredClone === "function" ? structuredClone(state.currentWorkout) : JSON.parse(JSON.stringify(state.currentWorkout));
   state.history.unshift(finishedWorkout);
   state.currentWorkout = null;
   saveState();
@@ -1068,20 +1265,14 @@ document.querySelector("#finishWorkoutButton").addEventListener("click", () => {
   switchView("historyView");
 });
 
-// Geschiedenis
 elements.historyList.addEventListener("click", (event) => {
   const button = event.target.closest("[data-history-action]");
   if (!button) return;
   const index = Number(button.dataset.historyIndex);
   const workout = state.history[index];
   if (!workout) return;
-
-  if (button.dataset.historyAction === "copy") {
-    copyText(workoutToAiText(workout));
-  }
-  if (button.dataset.historyAction === "download") {
-    downloadJson(workout, `${safeFilename(workout.workoutName)}-${workout.date}.json`);
-  }
+  if (button.dataset.historyAction === "copy") copyText(workoutToAiText(workout));
+  if (button.dataset.historyAction === "download") downloadJson(workout, `${safeFilename(workout.workoutName)}-${workout.date}.json`);
   if (button.dataset.historyAction === "delete" && confirm("Deze afgeronde training verwijderen?")) {
     state.history.splice(index, 1);
     saveState();
@@ -1094,10 +1285,25 @@ document.querySelector("#exportHistoryButton").addEventListener("click", () => {
   downloadJson({ exportedAt: new Date().toISOString(), workouts: state.history }, "gym-ai-trainingsgeschiedenis.json");
 });
 
-// Offline ondersteuning via service worker
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("service-worker.js").catch(console.error));
 }
+
+// Kleine read-only testhaak voor de lokale acceptatietests; de app zelf gebruikt dezelfde functies.
+window.GymAITestApi = Object.freeze({
+  EXERCISE_DATABASE,
+  parseGeneratorInput,
+  createGeneratedPlan,
+  searchExerciseDatabase,
+  validatePlan,
+  createWorkoutFromPlan,
+  migrateStoredWorkout,
+  resolveTrackingType,
+  addExtraRow,
+  extraRowIsModified,
+  workoutToAiText,
+  formatPlannedExercise
+});
 
 renderWorkout();
 renderHistory();
